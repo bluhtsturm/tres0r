@@ -100,6 +100,22 @@ def test_output_inside_source_is_excluded(tmp_path, sample_tree):
     assert "Projekt/selbst.tres0r" not in names
 
 
+def test_dot_and_dotdot_sources_get_real_names(tmp_path, sample_tree, monkeypatch):
+    """Fund: 'tres0r pack ..' legte alles unter '..' ab – der Container ließ sich
+    danach nicht mehr entpacken (UnsafeArchive)."""
+    root = sample_tree[0]
+    monkeypatch.chdir(root / "Unterordner")
+    for i, source in enumerate(["..", "tief/..", "."]):
+        out = tmp_path / f"p{i}.tres0r"
+        pack([source], out)
+        names = [e.name for e in container.list_contents(out, PASSWORD)]
+        expected = "Projekt" if source == ".." else "Unterordner"
+        assert names[0] == expected and not any(".." in n.split("/") for n in names)
+        container.extract(out, tmp_path / f"z{i}", PASSWORD)
+        assert (tmp_path / f"z{i}" / expected).is_dir()
+    assert container.plan_sources([".."]) == [(container.Path(".."), "Projekt")]
+
+
 def test_duplicate_names_rejected(tmp_path):
     (tmp_path / "a").mkdir()
     (tmp_path / "b").mkdir()

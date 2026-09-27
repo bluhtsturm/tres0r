@@ -37,6 +37,12 @@ def _size(n: int | None) -> str:
     return "–" if n is None else container.format_size(n)
 
 
+def _exact(name: str) -> str:
+    """Eintragsname als ``only``-Muster, das genau ihn trifft: ``only`` sind fnmatch-Muster –
+    "Urlaub [2019].jpg" passte sonst auf "Urlaub 2.jpg" (und "*" auf fremde Einträge)."""
+    return "".join(f"[{ch}]" if ch in "*?[" else ch for ch in name)
+
+
 def _duration(seconds: float | None) -> str:
     if seconds is None:
         return ""
@@ -447,7 +453,7 @@ class KeysScreen(Screen):
         self.info = container.inspect(self.path)
         for slot in self.info.slots:
             table.add_row(str(slot.index), escape(slot.type), escape(slot.description), key=str(slot.index))
-        self.sub_title = f"{escape(self.path.name)} – {len(self.info.slots)} Schlüssel"
+        self.sub_title = f"{self.path.name} – {len(self.info.slots)} Schlüssel"  # Titel sind reiner Text (Content)
         self.query_one("#hint", Label).update(
             "[dim]c = eigenes Passwort ändern · x = gewählten Slot entfernen · Esc = zurück. "
             "Änderungen schreiben nur den Header neu.[/]")
@@ -679,7 +685,7 @@ class BrowseScreen(Screen):
         if not name:
             self.notify("Bitte einen Eintrag wählen.", severity="warning")
             return
-        self._extract([name])
+        self._extract([_exact(name)])
 
     def action_extract_all(self) -> None:
         self._extract(None)

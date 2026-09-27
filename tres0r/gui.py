@@ -38,6 +38,12 @@ def _size(n: int | None) -> str:
     return "–" if n is None else container.format_size(n)
 
 
+def _exact(name: str) -> str:
+    """Eintragsname als ``only``-Muster, das genau ihn trifft: ``only`` sind fnmatch-Muster –
+    "Urlaub [2019].jpg" passte sonst auf "Urlaub 2.jpg" (und "*" auf fremde Einträge)."""
+    return "".join(f"[{ch}]" if ch in "*?[" else ch for ch in name)
+
+
 def _plain(label: QLabel) -> QLabel:
     """Reiner Text, umbrechend, markierbar – nie HTML."""
     label.setTextFormat(Qt.PlainText)
@@ -444,7 +450,7 @@ class BrowseWindow(QWidget):
         if not names:
             self.main.show_info("Bitte Einträge auswählen.")
             return
-        self._extract(names)
+        self._extract([_exact(name) for name in names])
 
     def extract_all(self) -> None:
         self._extract(None)

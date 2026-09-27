@@ -222,6 +222,22 @@ def test_append_refusals(work, tmp_path):
         add(out, tmp / "neu" / "notiz.txt")
 
 
+@pytest.mark.skipif(not hasattr(os, "mkfifo"), reason="keine FIFOs")
+def test_cli_append_reports_skipped_fifo(work, capsys):
+    """Fund: eine FIFO im angehängten Ordner ließ 'append' mit "too many values to
+    unpack" abbrechen (Plan.skipped enthält Pfade, keine Paare)."""
+    tmp, out = work
+    os.mkfifo(tmp / "neu" / "rohr")
+    pw = tmp / "pw"
+    pw.write_text(PASSWORD + "\n")
+    code = main(["append", str(out), str(tmp / "neu"), "--password-file", str(pw), "--json"])
+    data = json.loads(capsys.readouterr().out)
+    assert code == 0 and data["segment"] == 1
+    assert any("rohr" in w for w in data["warnings"])
+    result = container.append(out, [str(tmp / "neu")], PASSWORD)
+    assert result.skipped == [str(tmp / "neu" / "rohr")]
+
+
 def test_cli_append_repair_info(work, capsys):
     tmp, out = work
     pw = tmp / "pw"

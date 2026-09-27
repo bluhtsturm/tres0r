@@ -120,6 +120,11 @@ def test_cli_fido2(tmp_path, sample_tree, capsys, monkeypatch):
     out = tmp_path / "c.tres0r"
     assert main(["pack", str(sample_tree[1]), "-o", str(out), "--password-file", str(pw), "--offline", "--fido2"]) == 0
     assert "berühren" in capsys.readouterr().err
+    # --verify nutzt das Geheimnis aus der Registrierung: keine dritte Berührung (Fund: Exit-Code 2)
+    touches = token.touches
+    assert main(["pack", str(sample_tree[1]), "-o", str(tmp_path / "v.tres0r"), "--password-file", str(pw),
+                 "--offline", "--fido2", "--verify"]) == 0
+    assert token.touches == touches + 2 and "Prüfung erfolgreich" in capsys.readouterr().out
     assert main(["verify", str(out), "--password-file", str(pw), "--fido2", "--json"]) == 0
     capsys.readouterr()
     assert main(["verify", str(out), "--password-file", str(pw), "--json"]) == 2

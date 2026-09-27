@@ -128,6 +128,36 @@ def test_open_browse_and_extract(project, tmp_path):
     assert (dest / "Projekt" / "notiz.txt").read_text() == "Hallo"
 
 
+def test_extract_selection_with_glob_characters_in_name(tmp_path):
+    """Fund: "Auswahl entpacken" von "Urlaub [2019].jpg" entpackte "Urlaub 2.jpg" –
+    der Name ging ungeschützt als fnmatch-Muster an ``only``."""
+    root = tmp_path / "Fotos"
+    root.mkdir()
+    (root / "Urlaub [2019].jpg").write_text("richtig")
+    (root / "Urlaub 2.jpg").write_text("falsch")
+    out = container.create([root], tmp_path / "f.tres0r", PASSWORD, FAST).path
+    dest = tmp_path / "ziel"
+
+    async def scenario(app, pilot):
+        app.select(out)
+        await pilot.press("o")
+        await unlock(app, pilot)
+        await finish_progress(app, pilot)
+        await until(pilot, lambda: isinstance(app.screen, tui.BrowseScreen))
+        tree = app.screen.query_one("#contents", Tree)
+        tree.root.children[0].expand()
+        await pilot.pause()
+        node = next(n for n in tree.root.children[0].children if n.data == "Fotos/Urlaub [2019].jpg")
+        tree.move_cursor(node)
+        await pilot.press("e")
+        await until(pilot, lambda: isinstance(app.screen, tui.PathScreen))
+        app.screen.query_one("#path", Input).value = str(dest)
+        await pilot.click("#ok")
+        assert "1 Einträge" in await finish_progress(app, pilot)
+    run(scenario, tmp_path)
+    assert os.listdir(dest / "Fotos") == ["Urlaub [2019].jpg"]
+
+
 def test_wrong_password_shows_error(project, tmp_path):
     out = container.create([project], tmp_path / "c.tres0r", PASSWORD, FAST).path
 
@@ -216,6 +246,13 @@ def test_hostile_names_are_shown_literally(tmp_path):
         await pilot.press("down", "down")
         await pilot.pause()
         assert "[bold]fett" in text(app, "#entry")
+        # Titelzeilen sind reiner Text: kein sichtbarer Escape-Backslash (Fund in der Schlüsselansicht)
+        await pilot.press("escape")
+        await pilot.press("k")
+        await unlock(app, pilot)
+        await finish_progress(app, pilot)
+        await until(pilot, lambda: isinstance(app.screen, tui.KeysScreen))
+        assert app.screen.sub_title == "[link=x]c.tres0r – 1 Schlüssel"
     run(scenario, tmp_path)
 
 

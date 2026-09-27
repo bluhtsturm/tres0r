@@ -37,6 +37,23 @@ def test_parse_size():
             volumes.parse_size(bad)
 
 
+def test_container_name_ending_in_digits_is_not_a_part(tmp_path, big):
+    """Fund: "Steuer.2024" galt als Teil 2024 eines Satzes – create schrieb die Datei
+    und meldete dann "Teil 1 fehlt", kein Befehl konnte den Container öffnen."""
+    out = tmp_path / "Steuer.2024"
+    result = pack([big], out)
+    assert result.size == out.stat().st_size and volumes.base_of(out) is None
+    assert container.inspect(out).volumes == 1
+    assert len(container.list_contents(out, PASSWORD)) == 5
+    container.append(out, [tmp_path / "quelle" / "Daten" / "klein.txt"], PASSWORD)
+    container.verify(out, PASSWORD)
+    # Ein echter späterer Teil beginnt nicht mit der Kennung: weiterhin "Teil 1 fehlt"
+    pack([big], tmp_path / "s.tres0r", split=MIB)
+    (tmp_path / "s.tres0r.001").unlink()
+    with pytest.raises(FormatError, match="Teil 1"):
+        container.inspect(tmp_path / "s.tres0r.002")
+
+
 def test_split_roundtrip_and_random_access(tmp_path, big):
     result = pack([big], tmp_path / "s.tres0r", split=MIB)
     names = parts(tmp_path)

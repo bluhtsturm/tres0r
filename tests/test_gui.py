@@ -161,6 +161,28 @@ def test_open_search_extract_and_wrong_password(app, tmp_path, project):
     browse.close()
 
 
+def test_extract_selection_with_glob_characters_in_name(app, tmp_path):
+    """Fund: "Urlaub [2019].jpg" auswählen entpackte "Urlaub 2.jpg" (Name als fnmatch-Muster)."""
+    root = tmp_path / "Fotos"
+    root.mkdir()
+    (root / "Urlaub [2019].jpg").write_text("richtig")
+    (root / "Urlaub 2.jpg").write_text("falsch")
+    (root / "a*b.txt").write_text("stern")
+    (root / "axxb.txt").write_text("fremd")
+    out = container.create([root], tmp_path / "f.tres0r", PASSWORD, FAST).path
+    window, driver = make(app, tmp_path)
+    window.select(out)
+    driver.handlers["UnlockDialog"] = unlock_with()
+    window.open()
+    browse = window.windows[-1]
+    driver.handlers["directory"] = lambda: tmp_path / "ziel"
+    for name in ("Fotos/Urlaub [2019].jpg", "Fotos/a*b.txt"):
+        browse.items[name].setSelected(True)
+    browse.extract_selected()
+    assert sorted(os.listdir(tmp_path / "ziel" / "Fotos")) == ["Urlaub [2019].jpg", "a*b.txt"]
+    browse.close()
+
+
 def test_cancel_leaves_nothing(app, tmp_path, project, monkeypatch):
     def slow_create(sources, output, password, params, *, compress, progress):
         from tres0r.progress import Tracker

@@ -80,6 +80,8 @@ def test_genpass(capsys):
     assert len(pw) == 32 and pw.isalnum()
 
     assert main(["genpass", "-w", "3"]) == 1  # unter Minimum
+    with pytest.raises(SystemExit):  # Fund: -c 0 endete mit IndexError-Traceback
+        main(["genpass", "-c", "0"])
 
     assert main(["genpass", "--wordlist", "en", "--digit"]) == 0
     parts = capsys.readouterr().out.strip().split("-")

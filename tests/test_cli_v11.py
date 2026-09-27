@@ -37,6 +37,30 @@ def run_json(capsys, argv):
     return code, json.loads(captured.out), captured.err
 
 
+def test_password_file_with_bom(tmp_path, sample_tree, capsys):
+    """Fund: Ein Byte-Order-Mark (Windows-Editor, PowerShell 'Out-File -Encoding utf8')
+    wurde Teil des Passworts – den Container öffnete dann nur noch genau diese Datei."""
+    from tres0r import keys
+
+    bom = tmp_path / "bom.txt"
+    bom.write_bytes(b"\xef\xbb\xbf" + PASSWORD.encode() + b"\r\n")
+    out = tmp_path / "neu.tres0r"
+    assert main(["pack", str(sample_tree[0]), "-o", str(out), "-l", "schnell", "--password-file", str(bom),
+                 "--offline"]) == 0
+    container.verify(out, PASSWORD)  # eingetippt, ohne BOM
+    # Früher mit BOM angelegt: die Datei öffnet weiterhin
+    old = tmp_path / "alt.tres0r"
+    container.create([sample_tree[0]], old, "\ufeff" + PASSWORD, FAST)
+    assert main(["list", str(old), "--password-file", str(bom)]) == 0
+    capsys.readouterr()
+    # dasselbe für geschützte Schlüsseldateien
+    ident = keys.generate_identity()
+    for name, passphrase in (("neu.key", PASSWORD), ("alt.key", "\ufeff" + PASSWORD)):
+        keys.write_identity_file(tmp_path / name, ident, passphrase, FAST)
+        code, data, _ = run_json(capsys, ["pubkey", str(tmp_path / name), "--key-passphrase-file", str(bom)])
+        assert code == 0 and data["public_keys"] == [keys.public_text(ident)]
+
+
 # --- JSON -------------------------------------------------------------------
 def test_json_info_list_verify(packed, pwfile, capsys):
     capsys.readouterr()

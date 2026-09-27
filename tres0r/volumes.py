@@ -17,6 +17,7 @@ import tempfile
 from pathlib import Path
 
 from .errors import FormatError, Tres0rError
+from .header import MAGIC
 
 MIN_PART = 1 << 20  # 1 MiB – der Header muss ganz in Teil 1 passen
 _SUFFIX = re.compile(r"\.(\d{3,})$")
@@ -40,10 +41,24 @@ def part_name(base: Path, number: int) -> Path:
     return base.with_name(f"{base.name}.{number:03d}")
 
 
+def _is_container_start(path: Path) -> bool:
+    try:
+        with open(path, "rb") as f:
+            return f.read(len(MAGIC)) == MAGIC
+    except OSError:
+        return False
+
+
 def base_of(path: Path) -> Path | None:
-    """Basis eines Teilesatzes, falls ``path`` einer ist (x.tres0r.001 oder x.tres0r mit .001)."""
+    """Basis eines Teilesatzes, falls ``path`` einer ist (x.tres0r.001 oder x.tres0r mit .001).
+
+    Ein eigenständiger Container darf auch auf Ziffern enden ("Steuer.2024"): Nur Teil 1
+    beginnt mit der Container-Kennung – ein späterer Teil praktisch nie (2^-32).
+    """
     match = _SUFFIX.search(path.name)
     if match and not path.is_dir():
+        if int(match.group(1)) != 1 and _is_container_start(path):
+            return None
         return path.with_name(path.name[: match.start()])
     if not os.path.lexists(path) and os.path.lexists(part_name(path, 1)):
         return path

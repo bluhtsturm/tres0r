@@ -318,14 +318,14 @@ CreateResult(path: 'Path', entries: 'int', size: 'int', padding: 'int' = 0, skip
 
 ### `AppendResult` (Datenklasse)
 
-AppendResult(path: 'Path', segment: 'int', entries: 'int', size: 'int', added: 'int', skipped: 'list[tuple[str, str]]' = <factory>, excluded: 'int' = 0, issues: 'list[portability.Issue]' = <factory>)
+AppendResult(path: 'Path', segment: 'int', entries: 'int', size: 'int', added: 'int', skipped: 'list[str]' = <factory>, excluded: 'int' = 0, issues: 'list[portability.Issue]' = <factory>)
 
 * `path: Path`
 * `segment: int`
 * `entries: int`
 * `size: int`
 * `added: int`
-* `skipped: list[tuple[str, str]]`
+* `skipped: list[str]`
 * `excluded: int`
 * `issues: list[portability.Issue]`
 
