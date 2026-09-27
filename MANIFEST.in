@@ -1,0 +1,7 @@
+include LICENSE README.md CHANGELOG.md FORMAT.md API.md CONTRIBUTING.md SECURITY.md
+recursive-include man *.1
+include completions/tres0r.bash completions/_tres0r
+recursive-include tres0r/wordlists *
+recursive-include tests *.py *.json
+recursive-include fuzz *.py
+global-exclude __pycache__ *.py[co]

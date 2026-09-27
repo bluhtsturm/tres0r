@@ -1,0 +1,438 @@
+#compdef tres0r
+# zsh-Vervollständigung für tres0r – erzeugt von tres0r.docgen, nicht von Hand ändern
+_tres0r() {
+  if (( CURRENT == 2 )); then
+    local -a choices=('pack:Dateien/Ordner verschlüsseln' 'unpack:Container entpacken' 'verify:Container komplett prüfen (inkl. Signatur), ohne …' 'list:Inhalt anzeigen' 'info:Header und Keyslots anzeigen (ohne Passwort)' 'passwd:Passwort/Stufe ändern ohne Neuverschlüsselung' 'diff:Container mit Ordnern vergleichen (Exit 4 bei Unt…' 'append:Dateien als neues Segment anhängen (Bestand bleib…' 'repair:nach unterbrochenem Anhängen gültigen Stand herst…' 'mount:Container schreibgeschützt einhängen (FUSE, Linux…' 'umount:eingehängten Container aushängen' 'upgrade:Container von Formatversion 1 auf 2 umwandeln' 'salvage:intakte Dateien aus einem beschädigten Container …' 'encrypt:Datenstrom/Datei verschlüsseln (z. B. aus einer P…' 'decrypt:Datenstrom ausgeben (bei Datei-Containern – den t…' 'keygen:Schlüsselpaar erzeugen (X25519, mit --sign Ed2551…' 'gui:grafische Oberfläche starten (Extra tres0r(gui))' 'tui:Textoberfläche starten (Extra tres0r(tui))' 'completion:Shell-Vervollständigung ausgeben (bash oder zsh)' 'manpage:Manpage (roff) ausgeben' 'fido2:angeschlossene FIDO2-Tokens anzeigen' 'keyfile:Keyfile (zweiter Faktor) erzeugen' 'pubkey:öffentliche Schlüssel einer Identitätsdatei anzei…' 'protect:ungeschützte Identitätsdatei mit einer Passphrase…' 'keys:Keyslots eines Containers verwalten' 'genpass:Passwort/Passphrase generieren (pwgen)' 'checkpass:Passwort prüfen (Länge, Zeichenarten, HIBP)' 'bench:Stufen, -l auto und Durchsatz auf diesem Rechner …')
+    _describe 'Befehl' choices
+    return
+  fi
+  local cmd=${words[2]}
+  shift words; (( CURRENT-- ))
+  case $cmd in
+    pack)
+      _arguments -s '--json[Ergebnis als JSON auf stdout]' \
+          '(-g --generate)'{-g,--generate}'[generieren statt eingeben]:GENERATE:(passphrase passwort)' \
+          '--password-file[erste Zeile als neues Passwort (’-’ = stdin)]:DATEI:_files' \
+          '--offline[keine HIBP-Abfrage]' \
+          '(-y --yes)'{-y,--yes}'[generierte Geheimnisse nicht abtippen lassen]' \
+          '*'{-r,--recipient}'[öffentlicher Schlüssel (tres0r-pub-...), mehrfach möglich]:SCHLÜSSEL:_files' \
+          '*'{-R,--recipients-file}'[Datei mit Empfängern (oder eine Identitätsdatei)]:DATEI:_files' \
+          '--recovery[Wiederherstellungsphrase (20 Wörter) erzeugen]' \
+          '--no-password[kein Passwort, nur Empfänger/Phrase]' \
+          '--sign[mit dem Signaturschlüssel aus dieser Identitätsdatei signieren]:DATEI:_files' \
+          '--keyfile[Keyfile als zweiter Faktor zum Passwort]:DATEI:_files' \
+          '--fido2[FIDO2-Token als zweiter Faktor zum Passwort (hmac-secret)]' \
+          '--shares[Schwellwert-Slot – K von N Anteilen öffnen den Container]:K/N:_files' \
+          '--shares-dir[Anteile als einzelne Dateien ablegen statt anzeigen]:ORDNER:_files' \
+          '--key-passphrase-file[Passphrase für geschützte Schlüsseldateien (sonst Rückfrage)]:DATEI:_files' \
+          '(-w --words)'{-w,--words}'[Wörter je Passphrase (8-40, Standard 8)]:WORDS:_files' \
+          '(-n --length)'{-n,--length}'[Zeichen je Passwort (8-128, Standard 20)]:LENGTH:_files' \
+          '--wordlist[Wortliste für Passphrasen und Wiederherstellung (Standard de)]:WORDLIST:(en de)' \
+          '--sep[Trennzeichen (Standard ’-’)]:SEP:_files' \
+          '--capitalize[Wörter groß beginnen lassen]' \
+          '--digit[Ziffer an die Passphrase anhängen]' \
+          '--no-symbols[Passwort ohne Sonderzeichen]' \
+          '--no-ambiguous[Passwort ohne mehrdeutige Zeichen (01IOl|)]' \
+          '(-o --output)'{-o,--output}'[Zieldatei (bei einer Quelle – NAME.tres0r)]:DATEI:_files' \
+          '(-l --level)'{-l,--level}'[Stufe des Passworts (Standard normal). schnell – Öffnen in Sekundenbr…]:LEVEL:(schnell normal stark auto)' \
+          '--kdf-time[Zielzeit für -l auto in Sekunden (Standard 2.0)]:SEK:_files' \
+          '(-f --force)'{-f,--force}'[vorhandene Zieldatei überschreiben]' \
+          '*'{-x,--exclude}'[ausschließen, z. B. ’*.tmp’, ’build/’, ’Projekt/entwurf’ (mehrfach mö…]:MUSTER:_files' \
+          '*--exclude-from[Muster aus Datei lesen]:DATEI:_files' \
+          '--exclude-junk[Systemmüll auslassen (.DS_Store, Thumbs.db, __pycache__, Office-Sperr…]' \
+          '--no-ignore-file[.tres0rignore in Quellordnern nicht beachten]' \
+          '--strict-names[abbrechen, wenn Namen nicht auf allen Systemen gültig sind]' \
+          '(-z --compress)'{-z,--compress}'[mit zstd komprimieren]' \
+          '--no-pad[kein Größen-Padding (verrät die exakte Datenmenge)]' \
+          '--verify[fertigen Container danach komplett prüfen]' \
+          '--no-space-check[freien Speicherplatz nicht prüfen]' \
+          '--split[in Teile aufteilen, z. B. 4G, 700M (NAME.001, .002 …)]:GRÖSSE:_files' \
+          '--threads[Threads für Hashen und zstd (Standard – Anzahl Kerne, höchstens 8; 1 …]:N:_files' \
+          '--no-times[keine Änderungszeiten speichern (beim Entpacken gilt die aktuelle Zei…]' \
+          '--xattrs[erweiterte Attribute user.* sichern (Linux)]' \
+          '--acls[POSIX-ACLs sichern (Linux)]' \
+          '*:PFAD:_files' ;;
+    unpack)
+      _arguments -s '--json[Ergebnis als JSON auf stdout]' \
+          '--password-file[Passwort/Wiederherstellungsphrase aus erster Zeile (’-’ = stdin)]:DATEI:_files' \
+          '*'{-i,--identity}'[X25519-Identität (mehrfach möglich)]:DATEI:_files' \
+          '--key-passphrase-file[Passphrase für geschützte Schlüsseldateien (sonst Rückfrage)]:DATEI:_files' \
+          '*--keyfile[Keyfile als zweiter Faktor (mehrfach möglich)]:DATEI:_files' \
+          '--fido2[FIDO2-Token als zweiten Faktor verwenden (Berührung)]' \
+          '*--share[Schwellwert-Anteil (tres0r-teil-…), mehrfach]:ANTEIL:_files' \
+          '*--shares-file[Datei mit Anteilen (einer pro Zeile)]:DATEI:_files' \
+          '*--signer[Signatur von diesem Prüfschlüssel (tres0r-sig-...) verlangen, mehrfac…]:SCHLÜSSEL:_files' \
+          '*--signers-file[Datei mit erlaubten Prüfschlüsseln]:DATEI:_files' \
+          '(-o --output)'{-o,--output}'[Zielordner (Standard – aktueller)]:ORDNER:_files' \
+          '*--only[nur passende Pfade/Ordner, z. B. ’Projekt/docs’ oder ’*.pdf’ (mehrfac…]:MUSTER:_files' \
+          '--rename[kollidierende oder hier ungültige Namen umbenennen statt abzubrechen]' \
+          '--no-space-check[freien Speicherplatz nicht prüfen]' \
+          '--xattrs[gesicherte user.*-Attribute wiederherstellen (Linux)]' \
+          '--acls[gesicherte POSIX-ACLs wiederherstellen (Linux)]' \
+          ':CONTAINER:_files' ;;
+    verify)
+      _arguments -s '--json[Ergebnis als JSON auf stdout]' \
+          '--password-file[Passwort/Wiederherstellungsphrase aus erster Zeile (’-’ = stdin)]:DATEI:_files' \
+          '*'{-i,--identity}'[X25519-Identität (mehrfach möglich)]:DATEI:_files' \
+          '--key-passphrase-file[Passphrase für geschützte Schlüsseldateien (sonst Rückfrage)]:DATEI:_files' \
+          '*--keyfile[Keyfile als zweiter Faktor (mehrfach möglich)]:DATEI:_files' \
+          '--fido2[FIDO2-Token als zweiten Faktor verwenden (Berührung)]' \
+          '*--share[Schwellwert-Anteil (tres0r-teil-…), mehrfach]:ANTEIL:_files' \
+          '*--shares-file[Datei mit Anteilen (einer pro Zeile)]:DATEI:_files' \
+          '*--signer[Signatur von diesem Prüfschlüssel (tres0r-sig-...) verlangen, mehrfac…]:SCHLÜSSEL:_files' \
+          '*--signers-file[Datei mit erlaubten Prüfschlüsseln]:DATEI:_files' \
+          '--threads[Threads für Hashen und zstd (Standard – Anzahl Kerne, höchstens 8; 1 …]:N:_files' \
+          ':CONTAINER:_files' ;;
+    list)
+      _arguments -s '--json[Ergebnis als JSON auf stdout]' \
+          '--password-file[Passwort/Wiederherstellungsphrase aus erster Zeile (’-’ = stdin)]:DATEI:_files' \
+          '*'{-i,--identity}'[X25519-Identität (mehrfach möglich)]:DATEI:_files' \
+          '--key-passphrase-file[Passphrase für geschützte Schlüsseldateien (sonst Rückfrage)]:DATEI:_files' \
+          '*--keyfile[Keyfile als zweiter Faktor (mehrfach möglich)]:DATEI:_files' \
+          '--fido2[FIDO2-Token als zweiten Faktor verwenden (Berührung)]' \
+          '*--share[Schwellwert-Anteil (tres0r-teil-…), mehrfach]:ANTEIL:_files' \
+          '*--shares-file[Datei mit Anteilen (einer pro Zeile)]:DATEI:_files' \
+          ':CONTAINER:_files' ;;
+    info)
+      _arguments -s '--json[Ergebnis als JSON auf stdout]' \
+          ':CONTAINER:_files' ;;
+    passwd)
+      _arguments -s '--json[Ergebnis als JSON auf stdout]' \
+          '--password-file[Passwort/Wiederherstellungsphrase aus erster Zeile (’-’ = stdin)]:DATEI:_files' \
+          '*'{-i,--identity}'[X25519-Identität (mehrfach möglich)]:DATEI:_files' \
+          '--key-passphrase-file[Passphrase für geschützte Schlüsseldateien (sonst Rückfrage)]:DATEI:_files' \
+          '*--keyfile[Keyfile als zweiter Faktor (mehrfach möglich)]:DATEI:_files' \
+          '--fido2[FIDO2-Token als zweiten Faktor verwenden (Berührung)]' \
+          '*--share[Schwellwert-Anteil (tres0r-teil-…), mehrfach]:ANTEIL:_files' \
+          '*--shares-file[Datei mit Anteilen (einer pro Zeile)]:DATEI:_files' \
+          '(-g --generate)'{-g,--generate}'[generieren statt eingeben]:GENERATE:(passphrase passwort)' \
+          '--new-password-file[erste Zeile als neues Passwort (’-’ = stdin)]:DATEI:_files' \
+          '--offline[keine HIBP-Abfrage]' \
+          '(-y --yes)'{-y,--yes}'[generierte Geheimnisse nicht abtippen lassen]' \
+          '(-w --words)'{-w,--words}'[Wörter je Passphrase (8-40, Standard 8)]:WORDS:_files' \
+          '(-n --length)'{-n,--length}'[Zeichen je Passwort (8-128, Standard 20)]:LENGTH:_files' \
+          '--wordlist[Wortliste für Passphrasen und Wiederherstellung (Standard de)]:WORDLIST:(en de)' \
+          '--sep[Trennzeichen (Standard ’-’)]:SEP:_files' \
+          '--capitalize[Wörter groß beginnen lassen]' \
+          '--digit[Ziffer an die Passphrase anhängen]' \
+          '--no-symbols[Passwort ohne Sonderzeichen]' \
+          '--no-ambiguous[Passwort ohne mehrdeutige Zeichen (01IOl|)]' \
+          '(-l --level)'{-l,--level}'[neue Stufe (Standard – beibehalten). schnell – Öffnen in Sekundenbruc…]:LEVEL:(schnell normal stark auto)' \
+          '--kdf-time[Zielzeit für -l auto in Sekunden (Standard 2.0)]:SEK:_files' \
+          '--no-space-check[freien Speicherplatz nicht prüfen]' \
+          ':CONTAINER:_files' ;;
+    diff)
+      _arguments -s '--json[Ergebnis als JSON auf stdout]' \
+          '--password-file[Passwort/Wiederherstellungsphrase aus erster Zeile (’-’ = stdin)]:DATEI:_files' \
+          '*'{-i,--identity}'[X25519-Identität (mehrfach möglich)]:DATEI:_files' \
+          '--key-passphrase-file[Passphrase für geschützte Schlüsseldateien (sonst Rückfrage)]:DATEI:_files' \
+          '*--keyfile[Keyfile als zweiter Faktor (mehrfach möglich)]:DATEI:_files' \
+          '--fido2[FIDO2-Token als zweiten Faktor verwenden (Berührung)]' \
+          '*--share[Schwellwert-Anteil (tres0r-teil-…), mehrfach]:ANTEIL:_files' \
+          '*--shares-file[Datei mit Anteilen (einer pro Zeile)]:DATEI:_files' \
+          '--quick[nur Größe und Änderungszeit vergleichen (wie rsync)]' \
+          '--times[auch reine Zeitunterschiede melden]' \
+          '--threads[Threads für Hashen und zstd (Standard – Anzahl Kerne, höchstens 8; 1 …]:N:_files' \
+          '*'{-x,--exclude}'[]:MUSTER:_files' \
+          '*--exclude-from[]:DATEI:_files' \
+          '--exclude-junk[]' \
+          '--no-ignore-file[]' \
+          ':CONTAINER:_files' \
+          '*:PFAD:_files' ;;
+    append)
+      _arguments -s '--json[Ergebnis als JSON auf stdout]' \
+          '--password-file[Passwort/Wiederherstellungsphrase aus erster Zeile (’-’ = stdin)]:DATEI:_files' \
+          '*'{-i,--identity}'[X25519-Identität (mehrfach möglich)]:DATEI:_files' \
+          '--key-passphrase-file[Passphrase für geschützte Schlüsseldateien (sonst Rückfrage)]:DATEI:_files' \
+          '*--keyfile[Keyfile als zweiter Faktor (mehrfach möglich)]:DATEI:_files' \
+          '--fido2[FIDO2-Token als zweiten Faktor verwenden (Berührung)]' \
+          '*--share[Schwellwert-Anteil (tres0r-teil-…), mehrfach]:ANTEIL:_files' \
+          '*--shares-file[Datei mit Anteilen (einer pro Zeile)]:DATEI:_files' \
+          '(-z --compress)'{-z,--compress}'[dieses Segment mit zstd komprimieren]' \
+          '--sign[dieses Segment mit dem Schlüssel aus DATEI signieren]:DATEI:_files' \
+          '--no-pad[kein Größen-Padding]' \
+          '--no-space-check[freien Speicherplatz nicht prüfen]' \
+          '--strict-names[abbrechen, wenn Namen nicht überall gültig sind]' \
+          '--threads[Threads für Hashen und zstd (Standard – Anzahl Kerne, höchstens 8; 1 …]:N:_files' \
+          '*'{-x,--exclude}'[]:MUSTER:_files' \
+          '*--exclude-from[]:DATEI:_files' \
+          '--exclude-junk[]' \
+          '--no-ignore-file[]' \
+          '--no-times[]' \
+          '--xattrs[]' \
+          '--acls[]' \
+          ':CONTAINER:_files' \
+          '*:PFAD:_files' ;;
+    repair)
+      _arguments -s '--json[Ergebnis als JSON auf stdout]' \
+          '--password-file[Passwort/Wiederherstellungsphrase aus erster Zeile (’-’ = stdin)]:DATEI:_files' \
+          '*'{-i,--identity}'[X25519-Identität (mehrfach möglich)]:DATEI:_files' \
+          '--key-passphrase-file[Passphrase für geschützte Schlüsseldateien (sonst Rückfrage)]:DATEI:_files' \
+          '*--keyfile[Keyfile als zweiter Faktor (mehrfach möglich)]:DATEI:_files' \
+          '--fido2[FIDO2-Token als zweiten Faktor verwenden (Berührung)]' \
+          '*--share[Schwellwert-Anteil (tres0r-teil-…), mehrfach]:ANTEIL:_files' \
+          '*--shares-file[Datei mit Anteilen (einer pro Zeile)]:DATEI:_files' \
+          ':CONTAINER:_files' ;;
+    mount)
+      _arguments -s '--json[Ergebnis als JSON auf stdout]' \
+          '--password-file[Passwort/Wiederherstellungsphrase aus erster Zeile (’-’ = stdin)]:DATEI:_files' \
+          '*'{-i,--identity}'[X25519-Identität (mehrfach möglich)]:DATEI:_files' \
+          '--key-passphrase-file[Passphrase für geschützte Schlüsseldateien (sonst Rückfrage)]:DATEI:_files' \
+          '*--keyfile[Keyfile als zweiter Faktor (mehrfach möglich)]:DATEI:_files' \
+          '--fido2[FIDO2-Token als zweiten Faktor verwenden (Berührung)]' \
+          '*--share[Schwellwert-Anteil (tres0r-teil-…), mehrfach]:ANTEIL:_files' \
+          '*--shares-file[Datei mit Anteilen (einer pro Zeile)]:DATEI:_files' \
+          '*--signer[Signatur von diesem Prüfschlüssel (tres0r-sig-...) verlangen, mehrfac…]:SCHLÜSSEL:_files' \
+          '*--signers-file[Datei mit erlaubten Prüfschlüsseln]:DATEI:_files' \
+          '--verify[vorher vollständig prüfen (inkl. Signatur)]' \
+          '--allow-other[auch anderen Benutzern Zugriff geben (FUSE-Option)]' \
+          ':CONTAINER:_files' \
+          ':ORDNER:_files' ;;
+    umount)
+      _arguments -s '--json[Ergebnis als JSON auf stdout]' \
+          ':ORDNER:_files' ;;
+    upgrade)
+      _arguments -s '--json[Ergebnis als JSON auf stdout]' \
+          '--password-file[Passwort/Wiederherstellungsphrase aus erster Zeile (’-’ = stdin)]:DATEI:_files' \
+          '*'{-i,--identity}'[X25519-Identität (mehrfach möglich)]:DATEI:_files' \
+          '--key-passphrase-file[Passphrase für geschützte Schlüsseldateien (sonst Rückfrage)]:DATEI:_files' \
+          '*--keyfile[Keyfile als zweiter Faktor (mehrfach möglich)]:DATEI:_files' \
+          '--fido2[FIDO2-Token als zweiten Faktor verwenden (Berührung)]' \
+          '*--share[Schwellwert-Anteil (tres0r-teil-…), mehrfach]:ANTEIL:_files' \
+          '*--shares-file[Datei mit Anteilen (einer pro Zeile)]:DATEI:_files' \
+          '(-o --output)'{-o,--output}'[in neue Datei schreiben (Standard – ersetzen)]:DATEI:_files' \
+          '(-z --compress)'{-z,--compress}'[dabei mit zstd komprimieren]' \
+          '--no-pad[kein Größen-Padding]' \
+          '--no-space-check[freien Speicherplatz nicht prüfen]' \
+          '--split[Ergebnis in Teile aufteilen]:GRÖSSE:_files' \
+          '--threads[Threads für Hashen und zstd (Standard – Anzahl Kerne, höchstens 8; 1 …]:N:_files' \
+          ':CONTAINER:_files' ;;
+    salvage)
+      _arguments -s '--json[Ergebnis als JSON auf stdout]' \
+          '--password-file[Passwort/Wiederherstellungsphrase aus erster Zeile (’-’ = stdin)]:DATEI:_files' \
+          '*'{-i,--identity}'[X25519-Identität (mehrfach möglich)]:DATEI:_files' \
+          '--key-passphrase-file[Passphrase für geschützte Schlüsseldateien (sonst Rückfrage)]:DATEI:_files' \
+          '*--keyfile[Keyfile als zweiter Faktor (mehrfach möglich)]:DATEI:_files' \
+          '--fido2[FIDO2-Token als zweiten Faktor verwenden (Berührung)]' \
+          '*--share[Schwellwert-Anteil (tres0r-teil-…), mehrfach]:ANTEIL:_files' \
+          '*--shares-file[Datei mit Anteilen (einer pro Zeile)]:DATEI:_files' \
+          '(-o --output)'{-o,--output}'[Zielordner für das Gerettete]:ORDNER:_files' \
+          '--rename[kollidierende oder hier ungültige Namen umbenennen]' \
+          ':CONTAINER:_files' ;;
+    encrypt)
+      _arguments -s '--json[Ergebnis als JSON auf stdout]' \
+          '(-g --generate)'{-g,--generate}'[generieren statt eingeben]:GENERATE:(passphrase passwort)' \
+          '--password-file[erste Zeile als neues Passwort (’-’ = stdin)]:DATEI:_files' \
+          '--offline[keine HIBP-Abfrage]' \
+          '(-y --yes)'{-y,--yes}'[generierte Geheimnisse nicht abtippen lassen]' \
+          '*'{-r,--recipient}'[öffentlicher Schlüssel (tres0r-pub-...), mehrfach möglich]:SCHLÜSSEL:_files' \
+          '*'{-R,--recipients-file}'[Datei mit Empfängern (oder eine Identitätsdatei)]:DATEI:_files' \
+          '--recovery[Wiederherstellungsphrase (20 Wörter) erzeugen]' \
+          '--no-password[kein Passwort, nur Empfänger/Phrase]' \
+          '--sign[mit dem Signaturschlüssel aus dieser Identitätsdatei signieren]:DATEI:_files' \
+          '--keyfile[Keyfile als zweiter Faktor zum Passwort]:DATEI:_files' \
+          '--fido2[FIDO2-Token als zweiter Faktor zum Passwort (hmac-secret)]' \
+          '--shares[Schwellwert-Slot – K von N Anteilen öffnen den Container]:K/N:_files' \
+          '--shares-dir[Anteile als einzelne Dateien ablegen statt anzeigen]:ORDNER:_files' \
+          '--key-passphrase-file[Passphrase für geschützte Schlüsseldateien (sonst Rückfrage)]:DATEI:_files' \
+          '(-w --words)'{-w,--words}'[Wörter je Passphrase (8-40, Standard 8)]:WORDS:_files' \
+          '(-n --length)'{-n,--length}'[Zeichen je Passwort (8-128, Standard 20)]:LENGTH:_files' \
+          '--wordlist[Wortliste für Passphrasen und Wiederherstellung (Standard de)]:WORDLIST:(en de)' \
+          '--sep[Trennzeichen (Standard ’-’)]:SEP:_files' \
+          '--capitalize[Wörter groß beginnen lassen]' \
+          '--digit[Ziffer an die Passphrase anhängen]' \
+          '--no-symbols[Passwort ohne Sonderzeichen]' \
+          '--no-ambiguous[Passwort ohne mehrdeutige Zeichen (01IOl|)]' \
+          '(-o --output)'{-o,--output}'[Zieldatei oder ’-’ für stdout]:AUSGABE:_files' \
+          '(-l --level)'{-l,--level}'[Stufe des Passworts (Standard normal). schnell – Öffnen in Sekundenbr…]:LEVEL:(schnell normal stark auto)' \
+          '--kdf-time[Zielzeit für -l auto in Sekunden (Standard 2.0)]:SEK:_files' \
+          '(-z --compress)'{-z,--compress}'[mit zstd komprimieren]' \
+          '--no-pad[kein Größen-Padding]' \
+          '(-f --force)'{-f,--force}'[vorhandene Zieldatei überschreiben]' \
+          '--split[in Teile aufteilen, z. B. 4G, 700M]:GRÖSSE:_files' \
+          '--threads[Threads für Hashen und zstd (Standard – Anzahl Kerne, höchstens 8; 1 …]:N:_files' \
+          ':EINGABE:_files' ;;
+    decrypt)
+      _arguments -s '--json[Ergebnis als JSON auf stdout]' \
+          '--password-file[Passwort/Wiederherstellungsphrase aus erster Zeile (’-’ = stdin)]:DATEI:_files' \
+          '*'{-i,--identity}'[X25519-Identität (mehrfach möglich)]:DATEI:_files' \
+          '--key-passphrase-file[Passphrase für geschützte Schlüsseldateien (sonst Rückfrage)]:DATEI:_files' \
+          '*--keyfile[Keyfile als zweiter Faktor (mehrfach möglich)]:DATEI:_files' \
+          '--fido2[FIDO2-Token als zweiten Faktor verwenden (Berührung)]' \
+          '*--share[Schwellwert-Anteil (tres0r-teil-…), mehrfach]:ANTEIL:_files' \
+          '*--shares-file[Datei mit Anteilen (einer pro Zeile)]:DATEI:_files' \
+          '*--signer[Signatur von diesem Prüfschlüssel (tres0r-sig-...) verlangen, mehrfac…]:SCHLÜSSEL:_files' \
+          '*--signers-file[Datei mit erlaubten Prüfschlüsseln]:DATEI:_files' \
+          '(-o --output)'{-o,--output}'[Zieldatei oder ’-’ für stdout (Standard)]:AUSGABE:_files' \
+          '(-f --force)'{-f,--force}'[vorhandene Zieldatei überschreiben]' \
+          ':CONTAINER:_files' ;;
+    keygen)
+      _arguments -s '--json[Ergebnis als JSON auf stdout]' \
+          '(-g --generate)'{-g,--generate}'[generieren statt eingeben]:GENERATE:(passphrase passwort)' \
+          '--passphrase-file[erste Zeile als neues Passwort (’-’ = stdin)]:DATEI:_files' \
+          '--offline[keine HIBP-Abfrage]' \
+          '(-y --yes)'{-y,--yes}'[generierte Geheimnisse nicht abtippen lassen]' \
+          '(-w --words)'{-w,--words}'[Wörter je Passphrase (8-40, Standard 8)]:WORDS:_files' \
+          '(-n --length)'{-n,--length}'[Zeichen je Passwort (8-128, Standard 20)]:LENGTH:_files' \
+          '--wordlist[Wortliste für Passphrasen und Wiederherstellung (Standard de)]:WORDLIST:(en de)' \
+          '--sep[Trennzeichen (Standard ’-’)]:SEP:_files' \
+          '--capitalize[Wörter groß beginnen lassen]' \
+          '--digit[Ziffer an die Passphrase anhängen]' \
+          '--no-symbols[Passwort ohne Sonderzeichen]' \
+          '--no-ambiguous[Passwort ohne mehrdeutige Zeichen (01IOl|)]' \
+          '(-o --output)'{-o,--output}'[Identitätsdatei (’-’ = stdout)]:DATEI:_files' \
+          '--sign[Signaturschlüssel (Ed25519) statt Verschlüsselungsschlüssel]' \
+          '--unprotected[Datei NICHT mit einer Passphrase schützen]' \
+          '(-l --level)'{-l,--level}'[Stufe des Schutzes (Standard stark). schnell – Öffnen in Sekundenbruc…]:LEVEL:(schnell normal stark auto)' \
+          '--kdf-time[Zielzeit für -l auto in Sekunden (Standard 2.0)]:SEK:_files' ;;
+    gui)
+      _arguments -s '--json[Ergebnis als JSON auf stdout]' \
+          ':ORDNER:_files' ;;
+    tui)
+      _arguments -s '--json[Ergebnis als JSON auf stdout]' \
+          ':ORDNER:_files' ;;
+    completion)
+      _arguments -s '--json[Ergebnis als JSON auf stdout]' \
+          ':SHELL:(bash zsh)' ;;
+    manpage)
+      _arguments -s '--json[Ergebnis als JSON auf stdout]' ;;
+    fido2)
+      _arguments -s '--json[Ergebnis als JSON auf stdout]' ;;
+    keyfile)
+      _arguments -s '--json[Ergebnis als JSON auf stdout]' \
+          '(-o --output)'{-o,--output}'[]:DATEI:_files' ;;
+    pubkey)
+      _arguments -s '--json[Ergebnis als JSON auf stdout]' \
+          '--key-passphrase-file[Passphrase (sonst Rückfrage)]:DATEI:_files' \
+          ':IDENTITÄT:_files' ;;
+    protect)
+      _arguments -s '--json[Ergebnis als JSON auf stdout]' \
+          '(-g --generate)'{-g,--generate}'[generieren statt eingeben]:GENERATE:(passphrase passwort)' \
+          '--passphrase-file[erste Zeile als neues Passwort (’-’ = stdin)]:DATEI:_files' \
+          '--offline[keine HIBP-Abfrage]' \
+          '(-y --yes)'{-y,--yes}'[generierte Geheimnisse nicht abtippen lassen]' \
+          '(-w --words)'{-w,--words}'[Wörter je Passphrase (8-40, Standard 8)]:WORDS:_files' \
+          '(-n --length)'{-n,--length}'[Zeichen je Passwort (8-128, Standard 20)]:LENGTH:_files' \
+          '--wordlist[Wortliste für Passphrasen und Wiederherstellung (Standard de)]:WORDLIST:(en de)' \
+          '--sep[Trennzeichen (Standard ’-’)]:SEP:_files' \
+          '--capitalize[Wörter groß beginnen lassen]' \
+          '--digit[Ziffer an die Passphrase anhängen]' \
+          '--no-symbols[Passwort ohne Sonderzeichen]' \
+          '--no-ambiguous[Passwort ohne mehrdeutige Zeichen (01IOl|)]' \
+          '(-l --level)'{-l,--level}'[Stufe des Schutzes (Standard stark). schnell – Öffnen in Sekundenbruc…]:LEVEL:(schnell normal stark auto)' \
+          '--kdf-time[Zielzeit für -l auto in Sekunden (Standard 2.0)]:SEK:_files' \
+          ':IDENTITÄT:_files' ;;
+    keys)
+      if (( CURRENT == 2 )); then
+        local -a choices=('list:Keyslots anzeigen (ohne Passwort)' 'add-password:weiteres Passwort hinzufügen' 'add-shares:Schwellwert-Slot hinzufügen (K von N)' 'add-recovery:Wiederherstellungsphrase hinzufügen' 'add-recipient:Empfänger hinzufügen' 'remove:Keyslot entfernen')
+        _describe 'Aktion' choices
+        return
+      fi
+      local action=${words[2]}
+      shift words; (( CURRENT-- ))
+      case $action in
+        list) _arguments -s '--json[Ergebnis als JSON auf stdout]' \
+          ':CONTAINER:_files' ;;
+        add-password) _arguments -s '--json[Ergebnis als JSON auf stdout]' \
+          '--password-file[Passwort/Wiederherstellungsphrase aus erster Zeile (’-’ = stdin)]:DATEI:_files' \
+          '*'{-i,--identity}'[X25519-Identität (mehrfach möglich)]:DATEI:_files' \
+          '--key-passphrase-file[Passphrase für geschützte Schlüsseldateien (sonst Rückfrage)]:DATEI:_files' \
+          '*--keyfile[Keyfile als zweiter Faktor (mehrfach möglich)]:DATEI:_files' \
+          '--fido2[FIDO2-Token als zweiten Faktor verwenden (Berührung)]' \
+          '*--share[Schwellwert-Anteil (tres0r-teil-…), mehrfach]:ANTEIL:_files' \
+          '*--shares-file[Datei mit Anteilen (einer pro Zeile)]:DATEI:_files' \
+          '(-g --generate)'{-g,--generate}'[generieren statt eingeben]:GENERATE:(passphrase passwort)' \
+          '--new-password-file[erste Zeile als neues Passwort (’-’ = stdin)]:DATEI:_files' \
+          '--offline[keine HIBP-Abfrage]' \
+          '(-y --yes)'{-y,--yes}'[generierte Geheimnisse nicht abtippen lassen]' \
+          '(-w --words)'{-w,--words}'[Wörter je Passphrase (8-40, Standard 8)]:WORDS:_files' \
+          '(-n --length)'{-n,--length}'[Zeichen je Passwort (8-128, Standard 20)]:LENGTH:_files' \
+          '--wordlist[Wortliste für Passphrasen und Wiederherstellung (Standard de)]:WORDLIST:(en de)' \
+          '--sep[Trennzeichen (Standard ’-’)]:SEP:_files' \
+          '--capitalize[Wörter groß beginnen lassen]' \
+          '--digit[Ziffer an die Passphrase anhängen]' \
+          '--no-symbols[Passwort ohne Sonderzeichen]' \
+          '--no-ambiguous[Passwort ohne mehrdeutige Zeichen (01IOl|)]' \
+          '--new-keyfile[neues Passwort nur zusammen mit diesem Keyfile]:DATEI:_files' \
+          '--new-fido2[neues Passwort nur zusammen mit dem gesteckten FIDO2-Token]' \
+          '(-l --level)'{-l,--level}'[Stufe (Standard normal). schnell – Öffnen in Sekundenbruchteilen, ger…]:LEVEL:(schnell normal stark auto)' \
+          '--kdf-time[Zielzeit für -l auto in Sekunden (Standard 2.0)]:SEK:_files' \
+          ':CONTAINER:_files' ;;
+        add-shares) _arguments -s '--json[Ergebnis als JSON auf stdout]' \
+          '--password-file[Passwort/Wiederherstellungsphrase aus erster Zeile (’-’ = stdin)]:DATEI:_files' \
+          '*'{-i,--identity}'[X25519-Identität (mehrfach möglich)]:DATEI:_files' \
+          '--key-passphrase-file[Passphrase für geschützte Schlüsseldateien (sonst Rückfrage)]:DATEI:_files' \
+          '*--keyfile[Keyfile als zweiter Faktor (mehrfach möglich)]:DATEI:_files' \
+          '--fido2[FIDO2-Token als zweiten Faktor verwenden (Berührung)]' \
+          '*--share[Schwellwert-Anteil (tres0r-teil-…), mehrfach]:ANTEIL:_files' \
+          '*--shares-file[Datei mit Anteilen (einer pro Zeile)]:DATEI:_files' \
+          '--shares-dir[Anteile als einzelne Dateien ablegen]:ORDNER:_files' \
+          '(-y --yes)'{-y,--yes}'[Anteile nur ausgeben, nicht ausblenden]' \
+          ':CONTAINER:_files' \
+          ':K/N:_files' ;;
+        add-recovery) _arguments -s '--json[Ergebnis als JSON auf stdout]' \
+          '--password-file[Passwort/Wiederherstellungsphrase aus erster Zeile (’-’ = stdin)]:DATEI:_files' \
+          '*'{-i,--identity}'[X25519-Identität (mehrfach möglich)]:DATEI:_files' \
+          '--key-passphrase-file[Passphrase für geschützte Schlüsseldateien (sonst Rückfrage)]:DATEI:_files' \
+          '*--keyfile[Keyfile als zweiter Faktor (mehrfach möglich)]:DATEI:_files' \
+          '--fido2[FIDO2-Token als zweiten Faktor verwenden (Berührung)]' \
+          '*--share[Schwellwert-Anteil (tres0r-teil-…), mehrfach]:ANTEIL:_files' \
+          '*--shares-file[Datei mit Anteilen (einer pro Zeile)]:DATEI:_files' \
+          '(-w --words)'{-w,--words}'[Wörter je Passphrase (8-40, Standard 8)]:WORDS:_files' \
+          '(-n --length)'{-n,--length}'[Zeichen je Passwort (8-128, Standard 20)]:LENGTH:_files' \
+          '--wordlist[Wortliste für Passphrasen und Wiederherstellung (Standard de)]:WORDLIST:(en de)' \
+          '--sep[Trennzeichen (Standard ’-’)]:SEP:_files' \
+          '--capitalize[Wörter groß beginnen lassen]' \
+          '--digit[Ziffer an die Passphrase anhängen]' \
+          '--no-symbols[Passwort ohne Sonderzeichen]' \
+          '--no-ambiguous[Passwort ohne mehrdeutige Zeichen (01IOl|)]' \
+          '(-y --yes)'{-y,--yes}'[Phrase nicht abfragen]' \
+          ':CONTAINER:_files' ;;
+        add-recipient) _arguments -s '--json[Ergebnis als JSON auf stdout]' \
+          '--password-file[Passwort/Wiederherstellungsphrase aus erster Zeile (’-’ = stdin)]:DATEI:_files' \
+          '*'{-i,--identity}'[X25519-Identität (mehrfach möglich)]:DATEI:_files' \
+          '--key-passphrase-file[Passphrase für geschützte Schlüsseldateien (sonst Rückfrage)]:DATEI:_files' \
+          '*--keyfile[Keyfile als zweiter Faktor (mehrfach möglich)]:DATEI:_files' \
+          '--fido2[FIDO2-Token als zweiten Faktor verwenden (Berührung)]' \
+          '*--share[Schwellwert-Anteil (tres0r-teil-…), mehrfach]:ANTEIL:_files' \
+          '*--shares-file[Datei mit Anteilen (einer pro Zeile)]:DATEI:_files' \
+          '*'{-r,--recipient}'[]:SCHLÜSSEL:_files' \
+          '*'{-R,--recipients-file}'[]:DATEI:_files' \
+          ':CONTAINER:_files' ;;
+        remove) _arguments -s '--json[Ergebnis als JSON auf stdout]' \
+          '--password-file[Passwort/Wiederherstellungsphrase aus erster Zeile (’-’ = stdin)]:DATEI:_files' \
+          '*'{-i,--identity}'[X25519-Identität (mehrfach möglich)]:DATEI:_files' \
+          '--key-passphrase-file[Passphrase für geschützte Schlüsseldateien (sonst Rückfrage)]:DATEI:_files' \
+          '*--keyfile[Keyfile als zweiter Faktor (mehrfach möglich)]:DATEI:_files' \
+          '--fido2[FIDO2-Token als zweiten Faktor verwenden (Berührung)]' \
+          '*--share[Schwellwert-Anteil (tres0r-teil-…), mehrfach]:ANTEIL:_files' \
+          '*--shares-file[Datei mit Anteilen (einer pro Zeile)]:DATEI:_files' \
+          ':CONTAINER:_files' \
+          ':SLOT:_files' ;;
+      esac
+      ;;
+    genpass)
+      _arguments -s '--json[Ergebnis als JSON auf stdout]' \
+          '(-w --words)'{-w,--words}'[Wörter je Passphrase (8-40, Standard 8)]:WORDS:_files' \
+          '(-n --length)'{-n,--length}'[Zeichen je Passwort (8-128, Standard 20)]:LENGTH:_files' \
+          '--wordlist[Wortliste für Passphrasen und Wiederherstellung (Standard de)]:WORDLIST:(en de)' \
+          '--sep[Trennzeichen (Standard ’-’)]:SEP:_files' \
+          '--capitalize[Wörter groß beginnen lassen]' \
+          '--digit[Ziffer an die Passphrase anhängen]' \
+          '--no-symbols[Passwort ohne Sonderzeichen]' \
+          '--no-ambiguous[Passwort ohne mehrdeutige Zeichen (01IOl|)]' \
+          '(-c --count)'{-c,--count}'[Anzahl (Standard 1)]:COUNT:_files' \
+          ':KIND:(passphrase passwort)' ;;
+    checkpass)
+      _arguments -s '--json[Ergebnis als JSON auf stdout]' \
+          '--password-file[]:DATEI:_files' \
+          '--offline[keine HIBP-Abfrage]' ;;
+    bench)
+      _arguments -s '--json[Ergebnis als JSON auf stdout]' \
+          '--kdf-time[Zielzeit für den auto-Vorschlag]:SEK:_files' \
+          '--throughput[zusätzlich pack/verify mit und ohne Threads messen]' \
+          '--dir[Ordner für die Testdaten (Standard – temporär)]:ORDNER:_files' \
+          '--size[Größe der Testdaten (Standard 256)]:MiB:_files' ;;
+  esac
+}
+_tres0r "$@"

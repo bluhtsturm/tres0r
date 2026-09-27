@@ -1,0 +1,1258 @@
+.TH TRES0R 1 "" "tres0r 1.0.0rc7" "Benutzerbefehle"
+.nh
+.ad l
+.SH NAME
+tres0r \- Dateien, Ordner und Datenstr\[u00F6]me verschl\[u00FC]sseln
+.SH \[u00DC]BERSICHT
+.B tres0r
+.I BEFEHL
+.RI [ OPTIONEN ]
+.br
+.B tres0r
+.RB [ \-\-version | \-h ]
+.SH BESCHREIBUNG
+tres0r verschl\[u00FC]sselt Dateien, Ordner und Datenstr\[u00F6]me in einen Container (Argon2id, ChaCha20\-Poly1305, optional zstd). Container k\[u00F6]nnen mehrere Schl\[u00FC]ssel haben (Passw\[u00F6]rter, Wiederherstellungsphrase, Empf\[u00E4]nger, Keyfile, FIDO2\-Token, Schwellwert\-Anteile), signiert, aufgeteilt, eingeh\[u00E4]ngt und erweitert werden. Das Format ist in FORMAT.md beschrieben.
+Alle Befehle kennen \-\-json (maschinenlesbare Ausgabe auf stdout), \-q und \-v.
+.SH BEFEHLE
+.SS "pack"
+Dateien/Ordner verschl\[u00FC]sseln
+.PP
+tres0r pack [\-h] [\-\-json] [\-g {passphrase,passwort}] [\-\-password\-file DATEI] [\-\-offline] [\-y] [\-r SCHL\[u00DC]SSEL] [\-R DATEI] [\-\-recovery] [\-\-no\-password] [\-\-sign DATEI] [\-\-keyfile DATEI] [\-\-fido2] [\-\-shares K/N] [\-\-shares\-dir ORDNER] [\-\-key\-passphrase\-file DATEI] [\-w WORDS] [\-n LENGTH] [\-\-wordlist {en,de}] [\-\-sep SEP] [\-\-capitalize] [\-\-digit] [\-\-no\-symbols] [\-\-no\-ambiguous] [\-o DATEI] [\-l {schnell,normal,stark,auto}] [\-\-kdf\-time SEK] [\-f] [\-x MUSTER] [\-\-exclude\-from DATEI] [\-\-exclude\-junk] [\-\-no\-ignore\-file] [\-\-strict\-names] [\-z] [\-\-no\-pad] [\-\-verify] [\-\-no\-space\-check] [\-\-split GR\[u00D6]SSE] [\-\-threads N] [\-\-no\-times] [\-\-xattrs] [\-\-acls] PFAD [PFAD ...]
+.TP
+.B \-\-json
+Ergebnis als JSON auf stdout
+.TP
+.B \-g, \-\-generate GENERATE
+generieren statt eingeben
+.TP
+.B \-\-password\-file DATEI
+erste Zeile als neues Passwort ('\-' = stdin)
+.TP
+.B \-\-offline
+keine HIBP\-Abfrage
+.TP
+.B \-y, \-\-yes
+generierte Geheimnisse nicht abtippen lassen
+.TP
+.B \-r, \-\-recipient SCHL\[u00DC]SSEL
+\[u00F6]ffentlicher Schl\[u00FC]ssel (tres0r\-pub\-...), mehrfach m\[u00F6]glich
+.TP
+.B \-R, \-\-recipients\-file DATEI
+Datei mit Empf\[u00E4]ngern (oder eine Identit\[u00E4]tsdatei)
+.TP
+.B \-\-recovery
+Wiederherstellungsphrase (20 W\[u00F6]rter) erzeugen
+.TP
+.B \-\-no\-password
+kein Passwort, nur Empf\[u00E4]nger/Phrase
+.TP
+.B \-\-sign DATEI
+mit dem Signaturschl\[u00FC]ssel aus dieser Identit\[u00E4]tsdatei signieren
+.TP
+.B \-\-keyfile DATEI
+Keyfile als zweiter Faktor zum Passwort
+.TP
+.B \-\-fido2
+FIDO2\-Token als zweiter Faktor zum Passwort (hmac\-secret)
+.TP
+.B \-\-shares K/N
+Schwellwert\-Slot: K von N Anteilen \[u00F6]ffnen den Container
+.TP
+.B \-\-shares\-dir ORDNER
+Anteile als einzelne Dateien ablegen statt anzeigen
+.TP
+.B \-\-key\-passphrase\-file DATEI
+Passphrase f\[u00FC]r gesch\[u00FC]tzte Schl\[u00FC]sseldateien (sonst R\[u00FC]ckfrage)
+.TP
+.B \-w, \-\-words WORDS
+W\[u00F6]rter je Passphrase (8\-40, Standard 8)
+.TP
+.B \-n, \-\-length LENGTH
+Zeichen je Passwort (8\-128, Standard 20)
+.TP
+.B \-\-wordlist WORDLIST
+Wortliste f\[u00FC]r Passphrasen und Wiederherstellung (Standard de)
+.TP
+.B \-\-sep SEP
+Trennzeichen (Standard '\-')
+.TP
+.B \-\-capitalize
+W\[u00F6]rter gro\[u00DF] beginnen lassen
+.TP
+.B \-\-digit
+Ziffer an die Passphrase anh\[u00E4]ngen
+.TP
+.B \-\-no\-symbols
+Passwort ohne Sonderzeichen
+.TP
+.B \-\-no\-ambiguous
+Passwort ohne mehrdeutige Zeichen (01IOl|)
+.TP
+.B \-o, \-\-output DATEI
+Zieldatei (bei einer Quelle: NAME.tres0r)
+.TP
+.B \-l, \-\-level LEVEL
+Stufe des Passworts (Standard normal). schnell: \[u00D6]ffnen in Sekundenbruchteilen, geringer RAM\-Bedarf; normal: Guter Kompromiss f\[u00FC]r die meisten Rechner; stark: Maximaler Schutz gegen Passwort\-Raten, braucht 1 GiB RAM beim \[u00D6]ffnen; auto: auf \-\-kdf\-time kalibrieren
+.TP
+.B \-\-kdf\-time SEK
+Zielzeit f\[u00FC]r \-l auto in Sekunden (Standard 2.0)
+.TP
+.B \-f, \-\-force
+vorhandene Zieldatei \[u00FC]berschreiben
+.TP
+.B \-x, \-\-exclude MUSTER
+ausschlie\[u00DF]en, z. B. '*.tmp', 'build/', 'Projekt/entwurf' (mehrfach m\[u00F6]glich)
+.TP
+.B \-\-exclude\-from DATEI
+Muster aus Datei lesen
+.TP
+.B \-\-exclude\-junk
+Systemm\[u00FC]ll auslassen (.DS_Store, Thumbs.db, __pycache__, Office\-Sperrdateien ...)
+.TP
+.B \-\-no\-ignore\-file
+\&.tres0rignore in Quellordnern nicht beachten
+.TP
+.B \-\-strict\-names
+abbrechen, wenn Namen nicht auf allen Systemen g\[u00FC]ltig sind
+.TP
+.B \-z, \-\-compress
+mit zstd komprimieren
+.TP
+.B \-\-no\-pad
+kein Gr\[u00F6]\[u00DF]en\-Padding (verr\[u00E4]t die exakte Datenmenge)
+.TP
+.B \-\-verify
+fertigen Container danach komplett pr\[u00FC]fen
+.TP
+.B \-\-no\-space\-check
+freien Speicherplatz nicht pr\[u00FC]fen
+.TP
+.B \-\-split GR\[u00D6]SSE
+in Teile aufteilen, z. B. 4G, 700M (NAME.001, .002 \[u2026])
+.TP
+.B \-\-threads N
+Threads f\[u00FC]r Hashen und zstd (Standard: Anzahl Kerne, h\[u00F6]chstens 8; 1 = aus)
+.TP
+.B \-\-no\-times
+keine \[u00C4]nderungszeiten speichern (beim Entpacken gilt die aktuelle Zeit)
+.TP
+.B \-\-xattrs
+erweiterte Attribute user.* sichern (Linux)
+.TP
+.B \-\-acls
+POSIX\-ACLs sichern (Linux)
+.SS "unpack"
+Container entpacken
+.PP
+tres0r unpack [\-h] [\-\-json] [\-\-password\-file DATEI] [\-i DATEI] [\-\-key\-passphrase\-file DATEI] [\-\-keyfile DATEI] [\-\-fido2] [\-\-share ANTEIL] [\-\-shares\-file DATEI] [\-\-signer SCHL\[u00DC]SSEL] [\-\-signers\-file DATEI] [\-o ORDNER] [\-\-only MUSTER] [\-\-rename] [\-\-no\-space\-check] [\-\-xattrs] [\-\-acls] container
+.TP
+.I CONTAINER
+Containerdatei oder '\-' f\[u00FC]r stdin
+.TP
+.B \-\-json
+Ergebnis als JSON auf stdout
+.TP
+.B \-\-password\-file DATEI
+Passwort/Wiederherstellungsphrase aus erster Zeile ('\-' = stdin)
+.TP
+.B \-i, \-\-identity DATEI
+X25519\-Identit\[u00E4]t (mehrfach m\[u00F6]glich)
+.TP
+.B \-\-key\-passphrase\-file DATEI
+Passphrase f\[u00FC]r gesch\[u00FC]tzte Schl\[u00FC]sseldateien (sonst R\[u00FC]ckfrage)
+.TP
+.B \-\-keyfile DATEI
+Keyfile als zweiter Faktor (mehrfach m\[u00F6]glich)
+.TP
+.B \-\-fido2
+FIDO2\-Token als zweiten Faktor verwenden (Ber\[u00FC]hrung)
+.TP
+.B \-\-share ANTEIL
+Schwellwert\-Anteil (tres0r\-teil\-\[u2026]), mehrfach
+.TP
+.B \-\-shares\-file DATEI
+Datei mit Anteilen (einer pro Zeile)
+.TP
+.B \-\-signer SCHL\[u00DC]SSEL
+Signatur von diesem Pr\[u00FC]fschl\[u00FC]ssel (tres0r\-sig\-...) verlangen, mehrfach m\[u00F6]glich
+.TP
+.B \-\-signers\-file DATEI
+Datei mit erlaubten Pr\[u00FC]fschl\[u00FC]sseln
+.TP
+.B \-o, \-\-output ORDNER
+Zielordner (Standard: aktueller)
+.TP
+.B \-\-only MUSTER
+nur passende Pfade/Ordner, z. B. 'Projekt/docs' oder '*.pdf' (mehrfach m\[u00F6]glich)
+.TP
+.B \-\-rename
+kollidierende oder hier ung\[u00FC]ltige Namen umbenennen statt abzubrechen
+.TP
+.B \-\-no\-space\-check
+freien Speicherplatz nicht pr\[u00FC]fen
+.TP
+.B \-\-xattrs
+gesicherte user.*\-Attribute wiederherstellen (Linux)
+.TP
+.B \-\-acls
+gesicherte POSIX\-ACLs wiederherstellen (Linux)
+.SS "verify"
+Container komplett pr\[u00FC]fen (inkl. Signatur), ohne zu entpacken
+.PP
+tres0r verify [\-h] [\-\-json] [\-\-password\-file DATEI] [\-i DATEI] [\-\-key\-passphrase\-file DATEI] [\-\-keyfile DATEI] [\-\-fido2] [\-\-share ANTEIL] [\-\-shares\-file DATEI] [\-\-signer SCHL\[u00DC]SSEL] [\-\-signers\-file DATEI] [\-\-threads N] container
+.TP
+.B \-\-json
+Ergebnis als JSON auf stdout
+.TP
+.B \-\-password\-file DATEI
+Passwort/Wiederherstellungsphrase aus erster Zeile ('\-' = stdin)
+.TP
+.B \-i, \-\-identity DATEI
+X25519\-Identit\[u00E4]t (mehrfach m\[u00F6]glich)
+.TP
+.B \-\-key\-passphrase\-file DATEI
+Passphrase f\[u00FC]r gesch\[u00FC]tzte Schl\[u00FC]sseldateien (sonst R\[u00FC]ckfrage)
+.TP
+.B \-\-keyfile DATEI
+Keyfile als zweiter Faktor (mehrfach m\[u00F6]glich)
+.TP
+.B \-\-fido2
+FIDO2\-Token als zweiten Faktor verwenden (Ber\[u00FC]hrung)
+.TP
+.B \-\-share ANTEIL
+Schwellwert\-Anteil (tres0r\-teil\-\[u2026]), mehrfach
+.TP
+.B \-\-shares\-file DATEI
+Datei mit Anteilen (einer pro Zeile)
+.TP
+.B \-\-signer SCHL\[u00DC]SSEL
+Signatur von diesem Pr\[u00FC]fschl\[u00FC]ssel (tres0r\-sig\-...) verlangen, mehrfach m\[u00F6]glich
+.TP
+.B \-\-signers\-file DATEI
+Datei mit erlaubten Pr\[u00FC]fschl\[u00FC]sseln
+.TP
+.B \-\-threads N
+Threads f\[u00FC]r Hashen und zstd (Standard: Anzahl Kerne, h\[u00F6]chstens 8; 1 = aus)
+.SS "list"
+Inhalt anzeigen
+.PP
+tres0r list [\-h] [\-\-json] [\-\-password\-file DATEI] [\-i DATEI] [\-\-key\-passphrase\-file DATEI] [\-\-keyfile DATEI] [\-\-fido2] [\-\-share ANTEIL] [\-\-shares\-file DATEI] container
+.TP
+.B \-\-json
+Ergebnis als JSON auf stdout
+.TP
+.B \-\-password\-file DATEI
+Passwort/Wiederherstellungsphrase aus erster Zeile ('\-' = stdin)
+.TP
+.B \-i, \-\-identity DATEI
+X25519\-Identit\[u00E4]t (mehrfach m\[u00F6]glich)
+.TP
+.B \-\-key\-passphrase\-file DATEI
+Passphrase f\[u00FC]r gesch\[u00FC]tzte Schl\[u00FC]sseldateien (sonst R\[u00FC]ckfrage)
+.TP
+.B \-\-keyfile DATEI
+Keyfile als zweiter Faktor (mehrfach m\[u00F6]glich)
+.TP
+.B \-\-fido2
+FIDO2\-Token als zweiten Faktor verwenden (Ber\[u00FC]hrung)
+.TP
+.B \-\-share ANTEIL
+Schwellwert\-Anteil (tres0r\-teil\-\[u2026]), mehrfach
+.TP
+.B \-\-shares\-file DATEI
+Datei mit Anteilen (einer pro Zeile)
+.SS "info"
+Header und Keyslots anzeigen (ohne Passwort)
+.PP
+tres0r info [\-h] [\-\-json] container
+.TP
+.B \-\-json
+Ergebnis als JSON auf stdout
+.SS "passwd"
+Passwort/Stufe \[u00E4]ndern ohne Neuverschl\[u00FC]sselung
+.PP
+tres0r passwd [\-h] [\-\-json] [\-\-password\-file DATEI] [\-i DATEI] [\-\-key\-passphrase\-file DATEI] [\-\-keyfile DATEI] [\-\-fido2] [\-\-share ANTEIL] [\-\-shares\-file DATEI] [\-g {passphrase,passwort}] [\-\-new\-password\-file DATEI] [\-\-offline] [\-y] [\-w WORDS] [\-n LENGTH] [\-\-wordlist {en,de}] [\-\-sep SEP] [\-\-capitalize] [\-\-digit] [\-\-no\-symbols] [\-\-no\-ambiguous] [\-l {schnell,normal,stark,auto}] [\-\-kdf\-time SEK] [\-\-no\-space\-check] container
+.TP
+.B \-\-json
+Ergebnis als JSON auf stdout
+.TP
+.B \-\-password\-file DATEI
+Passwort/Wiederherstellungsphrase aus erster Zeile ('\-' = stdin)
+.TP
+.B \-i, \-\-identity DATEI
+X25519\-Identit\[u00E4]t (mehrfach m\[u00F6]glich)
+.TP
+.B \-\-key\-passphrase\-file DATEI
+Passphrase f\[u00FC]r gesch\[u00FC]tzte Schl\[u00FC]sseldateien (sonst R\[u00FC]ckfrage)
+.TP
+.B \-\-keyfile DATEI
+Keyfile als zweiter Faktor (mehrfach m\[u00F6]glich)
+.TP
+.B \-\-fido2
+FIDO2\-Token als zweiten Faktor verwenden (Ber\[u00FC]hrung)
+.TP
+.B \-\-share ANTEIL
+Schwellwert\-Anteil (tres0r\-teil\-\[u2026]), mehrfach
+.TP
+.B \-\-shares\-file DATEI
+Datei mit Anteilen (einer pro Zeile)
+.TP
+.B \-g, \-\-generate GENERATE
+generieren statt eingeben
+.TP
+.B \-\-new\-password\-file DATEI
+erste Zeile als neues Passwort ('\-' = stdin)
+.TP
+.B \-\-offline
+keine HIBP\-Abfrage
+.TP
+.B \-y, \-\-yes
+generierte Geheimnisse nicht abtippen lassen
+.TP
+.B \-w, \-\-words WORDS
+W\[u00F6]rter je Passphrase (8\-40, Standard 8)
+.TP
+.B \-n, \-\-length LENGTH
+Zeichen je Passwort (8\-128, Standard 20)
+.TP
+.B \-\-wordlist WORDLIST
+Wortliste f\[u00FC]r Passphrasen und Wiederherstellung (Standard de)
+.TP
+.B \-\-sep SEP
+Trennzeichen (Standard '\-')
+.TP
+.B \-\-capitalize
+W\[u00F6]rter gro\[u00DF] beginnen lassen
+.TP
+.B \-\-digit
+Ziffer an die Passphrase anh\[u00E4]ngen
+.TP
+.B \-\-no\-symbols
+Passwort ohne Sonderzeichen
+.TP
+.B \-\-no\-ambiguous
+Passwort ohne mehrdeutige Zeichen (01IOl|)
+.TP
+.B \-l, \-\-level LEVEL
+neue Stufe (Standard: beibehalten). schnell: \[u00D6]ffnen in Sekundenbruchteilen, geringer RAM\-Bedarf; normal: Guter Kompromiss f\[u00FC]r die meisten Rechner; stark: Maximaler Schutz gegen Passwort\-Raten, braucht 1 GiB RAM beim \[u00D6]ffnen; auto: auf \-\-kdf\-time kalibrieren
+.TP
+.B \-\-kdf\-time SEK
+Zielzeit f\[u00FC]r \-l auto in Sekunden (Standard 2.0)
+.TP
+.B \-\-no\-space\-check
+freien Speicherplatz nicht pr\[u00FC]fen
+.SS "diff"
+Container mit Ordnern vergleichen (Exit 4 bei Unterschieden)
+.PP
+tres0r diff [\-h] [\-\-json] [\-\-password\-file DATEI] [\-i DATEI] [\-\-key\-passphrase\-file DATEI] [\-\-keyfile DATEI] [\-\-fido2] [\-\-share ANTEIL] [\-\-shares\-file DATEI] [\-\-quick] [\-\-times] [\-\-threads N] [\-x MUSTER] [\-\-exclude\-from DATEI] [\-\-exclude\-junk] [\-\-no\-ignore\-file] container PFAD [PFAD ...]
+.TP
+.I PFAD
+dieselben Pfade wie beim Packen
+.TP
+.B \-\-json
+Ergebnis als JSON auf stdout
+.TP
+.B \-\-password\-file DATEI
+Passwort/Wiederherstellungsphrase aus erster Zeile ('\-' = stdin)
+.TP
+.B \-i, \-\-identity DATEI
+X25519\-Identit\[u00E4]t (mehrfach m\[u00F6]glich)
+.TP
+.B \-\-key\-passphrase\-file DATEI
+Passphrase f\[u00FC]r gesch\[u00FC]tzte Schl\[u00FC]sseldateien (sonst R\[u00FC]ckfrage)
+.TP
+.B \-\-keyfile DATEI
+Keyfile als zweiter Faktor (mehrfach m\[u00F6]glich)
+.TP
+.B \-\-fido2
+FIDO2\-Token als zweiten Faktor verwenden (Ber\[u00FC]hrung)
+.TP
+.B \-\-share ANTEIL
+Schwellwert\-Anteil (tres0r\-teil\-\[u2026]), mehrfach
+.TP
+.B \-\-shares\-file DATEI
+Datei mit Anteilen (einer pro Zeile)
+.TP
+.B \-\-quick
+nur Gr\[u00F6]\[u00DF]e und \[u00C4]nderungszeit vergleichen (wie rsync)
+.TP
+.B \-\-times
+auch reine Zeitunterschiede melden
+.TP
+.B \-\-threads N
+Threads f\[u00FC]r Hashen und zstd (Standard: Anzahl Kerne, h\[u00F6]chstens 8; 1 = aus)
+.TP
+.B \-x, \-\-exclude MUSTER
+
+.TP
+.B \-\-exclude\-from DATEI
+
+.TP
+.B \-\-exclude\-junk
+
+.TP
+.B \-\-no\-ignore\-file
+
+.SS "append"
+Dateien als neues Segment anh\[u00E4]ngen (Bestand bleibt unber\[u00FC]hrt)
+.PP
+tres0r append [\-h] [\-\-json] [\-\-password\-file DATEI] [\-i DATEI] [\-\-key\-passphrase\-file DATEI] [\-\-keyfile DATEI] [\-\-fido2] [\-\-share ANTEIL] [\-\-shares\-file DATEI] [\-z] [\-\-sign DATEI] [\-\-no\-pad] [\-\-no\-space\-check] [\-\-strict\-names] [\-\-threads N] [\-x MUSTER] [\-\-exclude\-from DATEI] [\-\-exclude\-junk] [\-\-no\-ignore\-file] [\-\-no\-times] [\-\-xattrs] [\-\-acls] container PFAD [PFAD ...]
+.TP
+.B \-\-json
+Ergebnis als JSON auf stdout
+.TP
+.B \-\-password\-file DATEI
+Passwort/Wiederherstellungsphrase aus erster Zeile ('\-' = stdin)
+.TP
+.B \-i, \-\-identity DATEI
+X25519\-Identit\[u00E4]t (mehrfach m\[u00F6]glich)
+.TP
+.B \-\-key\-passphrase\-file DATEI
+Passphrase f\[u00FC]r gesch\[u00FC]tzte Schl\[u00FC]sseldateien (sonst R\[u00FC]ckfrage)
+.TP
+.B \-\-keyfile DATEI
+Keyfile als zweiter Faktor (mehrfach m\[u00F6]glich)
+.TP
+.B \-\-fido2
+FIDO2\-Token als zweiten Faktor verwenden (Ber\[u00FC]hrung)
+.TP
+.B \-\-share ANTEIL
+Schwellwert\-Anteil (tres0r\-teil\-\[u2026]), mehrfach
+.TP
+.B \-\-shares\-file DATEI
+Datei mit Anteilen (einer pro Zeile)
+.TP
+.B \-z, \-\-compress
+dieses Segment mit zstd komprimieren
+.TP
+.B \-\-sign DATEI
+dieses Segment mit dem Schl\[u00FC]ssel aus DATEI signieren
+.TP
+.B \-\-no\-pad
+kein Gr\[u00F6]\[u00DF]en\-Padding
+.TP
+.B \-\-no\-space\-check
+freien Speicherplatz nicht pr\[u00FC]fen
+.TP
+.B \-\-strict\-names
+abbrechen, wenn Namen nicht \[u00FC]berall g\[u00FC]ltig sind
+.TP
+.B \-\-threads N
+Threads f\[u00FC]r Hashen und zstd (Standard: Anzahl Kerne, h\[u00F6]chstens 8; 1 = aus)
+.TP
+.B \-x, \-\-exclude MUSTER
+
+.TP
+.B \-\-exclude\-from DATEI
+
+.TP
+.B \-\-exclude\-junk
+
+.TP
+.B \-\-no\-ignore\-file
+
+.TP
+.B \-\-no\-times
+
+.TP
+.B \-\-xattrs
+
+.TP
+.B \-\-acls
+
+.SS "repair"
+nach unterbrochenem Anh\[u00E4]ngen g\[u00FC]ltigen Stand herstellen
+.PP
+tres0r repair [\-h] [\-\-json] [\-\-password\-file DATEI] [\-i DATEI] [\-\-key\-passphrase\-file DATEI] [\-\-keyfile DATEI] [\-\-fido2] [\-\-share ANTEIL] [\-\-shares\-file DATEI] container
+.TP
+.B \-\-json
+Ergebnis als JSON auf stdout
+.TP
+.B \-\-password\-file DATEI
+Passwort/Wiederherstellungsphrase aus erster Zeile ('\-' = stdin)
+.TP
+.B \-i, \-\-identity DATEI
+X25519\-Identit\[u00E4]t (mehrfach m\[u00F6]glich)
+.TP
+.B \-\-key\-passphrase\-file DATEI
+Passphrase f\[u00FC]r gesch\[u00FC]tzte Schl\[u00FC]sseldateien (sonst R\[u00FC]ckfrage)
+.TP
+.B \-\-keyfile DATEI
+Keyfile als zweiter Faktor (mehrfach m\[u00F6]glich)
+.TP
+.B \-\-fido2
+FIDO2\-Token als zweiten Faktor verwenden (Ber\[u00FC]hrung)
+.TP
+.B \-\-share ANTEIL
+Schwellwert\-Anteil (tres0r\-teil\-\[u2026]), mehrfach
+.TP
+.B \-\-shares\-file DATEI
+Datei mit Anteilen (einer pro Zeile)
+.SS "mount"
+Container schreibgesch\[u00FC]tzt einh\[u00E4]ngen (FUSE, Linux/macOS)
+.PP
+tres0r mount [\-h] [\-\-json] [\-\-password\-file DATEI] [\-i DATEI] [\-\-key\-passphrase\-file DATEI] [\-\-keyfile DATEI] [\-\-fido2] [\-\-share ANTEIL] [\-\-shares\-file DATEI] [\-\-signer SCHL\[u00DC]SSEL] [\-\-signers\-file DATEI] [\-\-verify] [\-\-allow\-other] container ORDNER
+.TP
+.B \-\-json
+Ergebnis als JSON auf stdout
+.TP
+.B \-\-password\-file DATEI
+Passwort/Wiederherstellungsphrase aus erster Zeile ('\-' = stdin)
+.TP
+.B \-i, \-\-identity DATEI
+X25519\-Identit\[u00E4]t (mehrfach m\[u00F6]glich)
+.TP
+.B \-\-key\-passphrase\-file DATEI
+Passphrase f\[u00FC]r gesch\[u00FC]tzte Schl\[u00FC]sseldateien (sonst R\[u00FC]ckfrage)
+.TP
+.B \-\-keyfile DATEI
+Keyfile als zweiter Faktor (mehrfach m\[u00F6]glich)
+.TP
+.B \-\-fido2
+FIDO2\-Token als zweiten Faktor verwenden (Ber\[u00FC]hrung)
+.TP
+.B \-\-share ANTEIL
+Schwellwert\-Anteil (tres0r\-teil\-\[u2026]), mehrfach
+.TP
+.B \-\-shares\-file DATEI
+Datei mit Anteilen (einer pro Zeile)
+.TP
+.B \-\-signer SCHL\[u00DC]SSEL
+Signatur von diesem Pr\[u00FC]fschl\[u00FC]ssel (tres0r\-sig\-...) verlangen, mehrfach m\[u00F6]glich
+.TP
+.B \-\-signers\-file DATEI
+Datei mit erlaubten Pr\[u00FC]fschl\[u00FC]sseln
+.TP
+.B \-\-verify
+vorher vollst\[u00E4]ndig pr\[u00FC]fen (inkl. Signatur)
+.TP
+.B \-\-allow\-other
+auch anderen Benutzern Zugriff geben (FUSE\-Option)
+.SS "umount"
+eingeh\[u00E4]ngten Container aush\[u00E4]ngen
+.PP
+tres0r umount [\-h] [\-\-json] ORDNER
+.TP
+.B \-\-json
+Ergebnis als JSON auf stdout
+.SS "upgrade"
+Container von Formatversion 1 auf 2 umwandeln
+.PP
+tres0r upgrade [\-h] [\-\-json] [\-\-password\-file DATEI] [\-i DATEI] [\-\-key\-passphrase\-file DATEI] [\-\-keyfile DATEI] [\-\-fido2] [\-\-share ANTEIL] [\-\-shares\-file DATEI] [\-o DATEI] [\-z] [\-\-no\-pad] [\-\-no\-space\-check] [\-\-split GR\[u00D6]SSE] [\-\-threads N] container
+.TP
+.B \-\-json
+Ergebnis als JSON auf stdout
+.TP
+.B \-\-password\-file DATEI
+Passwort/Wiederherstellungsphrase aus erster Zeile ('\-' = stdin)
+.TP
+.B \-i, \-\-identity DATEI
+X25519\-Identit\[u00E4]t (mehrfach m\[u00F6]glich)
+.TP
+.B \-\-key\-passphrase\-file DATEI
+Passphrase f\[u00FC]r gesch\[u00FC]tzte Schl\[u00FC]sseldateien (sonst R\[u00FC]ckfrage)
+.TP
+.B \-\-keyfile DATEI
+Keyfile als zweiter Faktor (mehrfach m\[u00F6]glich)
+.TP
+.B \-\-fido2
+FIDO2\-Token als zweiten Faktor verwenden (Ber\[u00FC]hrung)
+.TP
+.B \-\-share ANTEIL
+Schwellwert\-Anteil (tres0r\-teil\-\[u2026]), mehrfach
+.TP
+.B \-\-shares\-file DATEI
+Datei mit Anteilen (einer pro Zeile)
+.TP
+.B \-o, \-\-output DATEI
+in neue Datei schreiben (Standard: ersetzen)
+.TP
+.B \-z, \-\-compress
+dabei mit zstd komprimieren
+.TP
+.B \-\-no\-pad
+kein Gr\[u00F6]\[u00DF]en\-Padding
+.TP
+.B \-\-no\-space\-check
+freien Speicherplatz nicht pr\[u00FC]fen
+.TP
+.B \-\-split GR\[u00D6]SSE
+Ergebnis in Teile aufteilen
+.TP
+.B \-\-threads N
+Threads f\[u00FC]r Hashen und zstd (Standard: Anzahl Kerne, h\[u00F6]chstens 8; 1 = aus)
+.SS "salvage"
+intakte Dateien aus einem besch\[u00E4]digten Container retten
+.PP
+tres0r salvage [\-h] [\-\-json] [\-\-password\-file DATEI] [\-i DATEI] [\-\-key\-passphrase\-file DATEI] [\-\-keyfile DATEI] [\-\-fido2] [\-\-share ANTEIL] [\-\-shares\-file DATEI] \-o ORDNER [\-\-rename] container
+.TP
+.B \-\-json
+Ergebnis als JSON auf stdout
+.TP
+.B \-\-password\-file DATEI
+Passwort/Wiederherstellungsphrase aus erster Zeile ('\-' = stdin)
+.TP
+.B \-i, \-\-identity DATEI
+X25519\-Identit\[u00E4]t (mehrfach m\[u00F6]glich)
+.TP
+.B \-\-key\-passphrase\-file DATEI
+Passphrase f\[u00FC]r gesch\[u00FC]tzte Schl\[u00FC]sseldateien (sonst R\[u00FC]ckfrage)
+.TP
+.B \-\-keyfile DATEI
+Keyfile als zweiter Faktor (mehrfach m\[u00F6]glich)
+.TP
+.B \-\-fido2
+FIDO2\-Token als zweiten Faktor verwenden (Ber\[u00FC]hrung)
+.TP
+.B \-\-share ANTEIL
+Schwellwert\-Anteil (tres0r\-teil\-\[u2026]), mehrfach
+.TP
+.B \-\-shares\-file DATEI
+Datei mit Anteilen (einer pro Zeile)
+.TP
+.B \-o, \-\-output ORDNER
+Zielordner f\[u00FC]r das Gerettete
+.TP
+.B \-\-rename
+kollidierende oder hier ung\[u00FC]ltige Namen umbenennen
+.SS "encrypt"
+Datenstrom/Datei verschl\[u00FC]sseln (z. B. aus einer Pipe)
+.PP
+tres0r encrypt [\-h] [\-\-json] [\-g {passphrase,passwort}] [\-\-password\-file DATEI] [\-\-offline] [\-y] [\-r SCHL\[u00DC]SSEL] [\-R DATEI] [\-\-recovery] [\-\-no\-password] [\-\-sign DATEI] [\-\-keyfile DATEI] [\-\-fido2] [\-\-shares K/N] [\-\-shares\-dir ORDNER] [\-\-key\-passphrase\-file DATEI] [\-w WORDS] [\-n LENGTH] [\-\-wordlist {en,de}] [\-\-sep SEP] [\-\-capitalize] [\-\-digit] [\-\-no\-symbols] [\-\-no\-ambiguous] \-o AUSGABE [\-l {schnell,normal,stark,auto}] [\-\-kdf\-time SEK] [\-z] [\-\-no\-pad] [\-f] [\-\-split GR\[u00D6]SSE] [\-\-threads N] [EINGABE]
+.TP
+.I EINGABE
+Datei oder '\-' f\[u00FC]r stdin (Standard)
+.TP
+.B \-\-json
+Ergebnis als JSON auf stdout
+.TP
+.B \-g, \-\-generate GENERATE
+generieren statt eingeben
+.TP
+.B \-\-password\-file DATEI
+erste Zeile als neues Passwort ('\-' = stdin)
+.TP
+.B \-\-offline
+keine HIBP\-Abfrage
+.TP
+.B \-y, \-\-yes
+generierte Geheimnisse nicht abtippen lassen
+.TP
+.B \-r, \-\-recipient SCHL\[u00DC]SSEL
+\[u00F6]ffentlicher Schl\[u00FC]ssel (tres0r\-pub\-...), mehrfach m\[u00F6]glich
+.TP
+.B \-R, \-\-recipients\-file DATEI
+Datei mit Empf\[u00E4]ngern (oder eine Identit\[u00E4]tsdatei)
+.TP
+.B \-\-recovery
+Wiederherstellungsphrase (20 W\[u00F6]rter) erzeugen
+.TP
+.B \-\-no\-password
+kein Passwort, nur Empf\[u00E4]nger/Phrase
+.TP
+.B \-\-sign DATEI
+mit dem Signaturschl\[u00FC]ssel aus dieser Identit\[u00E4]tsdatei signieren
+.TP
+.B \-\-keyfile DATEI
+Keyfile als zweiter Faktor zum Passwort
+.TP
+.B \-\-fido2
+FIDO2\-Token als zweiter Faktor zum Passwort (hmac\-secret)
+.TP
+.B \-\-shares K/N
+Schwellwert\-Slot: K von N Anteilen \[u00F6]ffnen den Container
+.TP
+.B \-\-shares\-dir ORDNER
+Anteile als einzelne Dateien ablegen statt anzeigen
+.TP
+.B \-\-key\-passphrase\-file DATEI
+Passphrase f\[u00FC]r gesch\[u00FC]tzte Schl\[u00FC]sseldateien (sonst R\[u00FC]ckfrage)
+.TP
+.B \-w, \-\-words WORDS
+W\[u00F6]rter je Passphrase (8\-40, Standard 8)
+.TP
+.B \-n, \-\-length LENGTH
+Zeichen je Passwort (8\-128, Standard 20)
+.TP
+.B \-\-wordlist WORDLIST
+Wortliste f\[u00FC]r Passphrasen und Wiederherstellung (Standard de)
+.TP
+.B \-\-sep SEP
+Trennzeichen (Standard '\-')
+.TP
+.B \-\-capitalize
+W\[u00F6]rter gro\[u00DF] beginnen lassen
+.TP
+.B \-\-digit
+Ziffer an die Passphrase anh\[u00E4]ngen
+.TP
+.B \-\-no\-symbols
+Passwort ohne Sonderzeichen
+.TP
+.B \-\-no\-ambiguous
+Passwort ohne mehrdeutige Zeichen (01IOl|)
+.TP
+.B \-o, \-\-output AUSGABE
+Zieldatei oder '\-' f\[u00FC]r stdout
+.TP
+.B \-l, \-\-level LEVEL
+Stufe des Passworts (Standard normal). schnell: \[u00D6]ffnen in Sekundenbruchteilen, geringer RAM\-Bedarf; normal: Guter Kompromiss f\[u00FC]r die meisten Rechner; stark: Maximaler Schutz gegen Passwort\-Raten, braucht 1 GiB RAM beim \[u00D6]ffnen; auto: auf \-\-kdf\-time kalibrieren
+.TP
+.B \-\-kdf\-time SEK
+Zielzeit f\[u00FC]r \-l auto in Sekunden (Standard 2.0)
+.TP
+.B \-z, \-\-compress
+mit zstd komprimieren
+.TP
+.B \-\-no\-pad
+kein Gr\[u00F6]\[u00DF]en\-Padding
+.TP
+.B \-f, \-\-force
+vorhandene Zieldatei \[u00FC]berschreiben
+.TP
+.B \-\-split GR\[u00D6]SSE
+in Teile aufteilen, z. B. 4G, 700M
+.TP
+.B \-\-threads N
+Threads f\[u00FC]r Hashen und zstd (Standard: Anzahl Kerne, h\[u00F6]chstens 8; 1 = aus)
+.SS "decrypt"
+Datenstrom ausgeben (bei Datei\-Containern: den tar\-Stream)
+.PP
+tres0r decrypt [\-h] [\-\-json] [\-\-password\-file DATEI] [\-i DATEI] [\-\-key\-passphrase\-file DATEI] [\-\-keyfile DATEI] [\-\-fido2] [\-\-share ANTEIL] [\-\-shares\-file DATEI] [\-\-signer SCHL\[u00DC]SSEL] [\-\-signers\-file DATEI] [\-o AUSGABE] [\-f] CONTAINER
+.TP
+.I CONTAINER
+Datei oder '\-' f\[u00FC]r stdin
+.TP
+.B \-\-json
+Ergebnis als JSON auf stdout
+.TP
+.B \-\-password\-file DATEI
+Passwort/Wiederherstellungsphrase aus erster Zeile ('\-' = stdin)
+.TP
+.B \-i, \-\-identity DATEI
+X25519\-Identit\[u00E4]t (mehrfach m\[u00F6]glich)
+.TP
+.B \-\-key\-passphrase\-file DATEI
+Passphrase f\[u00FC]r gesch\[u00FC]tzte Schl\[u00FC]sseldateien (sonst R\[u00FC]ckfrage)
+.TP
+.B \-\-keyfile DATEI
+Keyfile als zweiter Faktor (mehrfach m\[u00F6]glich)
+.TP
+.B \-\-fido2
+FIDO2\-Token als zweiten Faktor verwenden (Ber\[u00FC]hrung)
+.TP
+.B \-\-share ANTEIL
+Schwellwert\-Anteil (tres0r\-teil\-\[u2026]), mehrfach
+.TP
+.B \-\-shares\-file DATEI
+Datei mit Anteilen (einer pro Zeile)
+.TP
+.B \-\-signer SCHL\[u00DC]SSEL
+Signatur von diesem Pr\[u00FC]fschl\[u00FC]ssel (tres0r\-sig\-...) verlangen, mehrfach m\[u00F6]glich
+.TP
+.B \-\-signers\-file DATEI
+Datei mit erlaubten Pr\[u00FC]fschl\[u00FC]sseln
+.TP
+.B \-o, \-\-output AUSGABE
+Zieldatei oder '\-' f\[u00FC]r stdout (Standard)
+.TP
+.B \-f, \-\-force
+vorhandene Zieldatei \[u00FC]berschreiben
+.SS "keygen"
+Schl\[u00FC]sselpaar erzeugen (X25519, mit \-\-sign Ed25519)
+.PP
+tres0r keygen [\-h] [\-\-json] [\-g {passphrase,passwort}] [\-\-passphrase\-file DATEI] [\-\-offline] [\-y] [\-w WORDS] [\-n LENGTH] [\-\-wordlist {en,de}] [\-\-sep SEP] [\-\-capitalize] [\-\-digit] [\-\-no\-symbols] [\-\-no\-ambiguous] \-o DATEI [\-\-sign] [\-\-unprotected] [\-l {schnell,normal,stark,auto}] [\-\-kdf\-time SEK]
+.TP
+.B \-\-json
+Ergebnis als JSON auf stdout
+.TP
+.B \-g, \-\-generate GENERATE
+generieren statt eingeben
+.TP
+.B \-\-passphrase\-file DATEI
+erste Zeile als neues Passwort ('\-' = stdin)
+.TP
+.B \-\-offline
+keine HIBP\-Abfrage
+.TP
+.B \-y, \-\-yes
+generierte Geheimnisse nicht abtippen lassen
+.TP
+.B \-w, \-\-words WORDS
+W\[u00F6]rter je Passphrase (8\-40, Standard 8)
+.TP
+.B \-n, \-\-length LENGTH
+Zeichen je Passwort (8\-128, Standard 20)
+.TP
+.B \-\-wordlist WORDLIST
+Wortliste f\[u00FC]r Passphrasen und Wiederherstellung (Standard de)
+.TP
+.B \-\-sep SEP
+Trennzeichen (Standard '\-')
+.TP
+.B \-\-capitalize
+W\[u00F6]rter gro\[u00DF] beginnen lassen
+.TP
+.B \-\-digit
+Ziffer an die Passphrase anh\[u00E4]ngen
+.TP
+.B \-\-no\-symbols
+Passwort ohne Sonderzeichen
+.TP
+.B \-\-no\-ambiguous
+Passwort ohne mehrdeutige Zeichen (01IOl|)
+.TP
+.B \-o, \-\-output DATEI
+Identit\[u00E4]tsdatei ('\-' = stdout)
+.TP
+.B \-\-sign
+Signaturschl\[u00FC]ssel (Ed25519) statt Verschl\[u00FC]sselungsschl\[u00FC]ssel
+.TP
+.B \-\-unprotected
+Datei NICHT mit einer Passphrase sch\[u00FC]tzen
+.TP
+.B \-l, \-\-level LEVEL
+Stufe des Schutzes (Standard stark). schnell: \[u00D6]ffnen in Sekundenbruchteilen, geringer RAM\-Bedarf; normal: Guter Kompromiss f\[u00FC]r die meisten Rechner; stark: Maximaler Schutz gegen Passwort\-Raten, braucht 1 GiB RAM beim \[u00D6]ffnen; auto: auf \-\-kdf\-time kalibrieren
+.TP
+.B \-\-kdf\-time SEK
+Zielzeit f\[u00FC]r \-l auto in Sekunden (Standard 2.0)
+.SS "gui"
+grafische Oberfl\[u00E4]che starten (Extra tres0r[gui])
+.PP
+tres0r gui [\-h] [\-\-json] [ORDNER]
+.TP
+.I ORDNER
+Startordner (Standard: Home)
+.TP
+.B \-\-json
+Ergebnis als JSON auf stdout
+.SS "tui"
+Textoberfl\[u00E4]che starten (Extra tres0r[tui])
+.PP
+tres0r tui [\-h] [\-\-json] [ORDNER]
+.TP
+.I ORDNER
+Startordner (Standard: aktueller Ordner)
+.TP
+.B \-\-json
+Ergebnis als JSON auf stdout
+.SS "completion"
+Shell\-Vervollst\[u00E4]ndigung ausgeben (bash oder zsh)
+.PP
+tres0r completion [\-h] [\-\-json] {bash,zsh}
+.TP
+.B \-\-json
+Ergebnis als JSON auf stdout
+.SS "manpage"
+Manpage (roff) ausgeben
+.PP
+tres0r manpage [\-h] [\-\-json]
+.TP
+.B \-\-json
+Ergebnis als JSON auf stdout
+.SS "fido2"
+angeschlossene FIDO2\-Tokens anzeigen
+.PP
+tres0r fido2 [\-h] [\-\-json]
+.TP
+.B \-\-json
+Ergebnis als JSON auf stdout
+.SS "keyfile"
+Keyfile (zweiter Faktor) erzeugen
+.PP
+tres0r keyfile [\-h] [\-\-json] \-o DATEI
+.TP
+.B \-\-json
+Ergebnis als JSON auf stdout
+.TP
+.B \-o, \-\-output DATEI
+
+.SS "pubkey"
+\[u00F6]ffentliche Schl\[u00FC]ssel einer Identit\[u00E4]tsdatei anzeigen
+.PP
+tres0r pubkey [\-h] [\-\-json] [\-\-key\-passphrase\-file DATEI] IDENTIT\[u00C4]T
+.TP
+.B \-\-json
+Ergebnis als JSON auf stdout
+.TP
+.B \-\-key\-passphrase\-file DATEI
+Passphrase (sonst R\[u00FC]ckfrage)
+.SS "protect"
+ungesch\[u00FC]tzte Identit\[u00E4]tsdatei mit einer Passphrase sch\[u00FC]tzen
+.PP
+tres0r protect [\-h] [\-\-json] [\-g {passphrase,passwort}] [\-\-passphrase\-file DATEI] [\-\-offline] [\-y] [\-w WORDS] [\-n LENGTH] [\-\-wordlist {en,de}] [\-\-sep SEP] [\-\-capitalize] [\-\-digit] [\-\-no\-symbols] [\-\-no\-ambiguous] [\-l {schnell,normal,stark,auto}] [\-\-kdf\-time SEK] IDENTIT\[u00C4]T
+.TP
+.B \-\-json
+Ergebnis als JSON auf stdout
+.TP
+.B \-g, \-\-generate GENERATE
+generieren statt eingeben
+.TP
+.B \-\-passphrase\-file DATEI
+erste Zeile als neues Passwort ('\-' = stdin)
+.TP
+.B \-\-offline
+keine HIBP\-Abfrage
+.TP
+.B \-y, \-\-yes
+generierte Geheimnisse nicht abtippen lassen
+.TP
+.B \-w, \-\-words WORDS
+W\[u00F6]rter je Passphrase (8\-40, Standard 8)
+.TP
+.B \-n, \-\-length LENGTH
+Zeichen je Passwort (8\-128, Standard 20)
+.TP
+.B \-\-wordlist WORDLIST
+Wortliste f\[u00FC]r Passphrasen und Wiederherstellung (Standard de)
+.TP
+.B \-\-sep SEP
+Trennzeichen (Standard '\-')
+.TP
+.B \-\-capitalize
+W\[u00F6]rter gro\[u00DF] beginnen lassen
+.TP
+.B \-\-digit
+Ziffer an die Passphrase anh\[u00E4]ngen
+.TP
+.B \-\-no\-symbols
+Passwort ohne Sonderzeichen
+.TP
+.B \-\-no\-ambiguous
+Passwort ohne mehrdeutige Zeichen (01IOl|)
+.TP
+.B \-l, \-\-level LEVEL
+Stufe des Schutzes (Standard stark). schnell: \[u00D6]ffnen in Sekundenbruchteilen, geringer RAM\-Bedarf; normal: Guter Kompromiss f\[u00FC]r die meisten Rechner; stark: Maximaler Schutz gegen Passwort\-Raten, braucht 1 GiB RAM beim \[u00D6]ffnen; auto: auf \-\-kdf\-time kalibrieren
+.TP
+.B \-\-kdf\-time SEK
+Zielzeit f\[u00FC]r \-l auto in Sekunden (Standard 2.0)
+.SS "keys"
+Keyslots eines Containers verwalten
+Unterbefehle siehe unten.
+.SS "keys list"
+Keyslots anzeigen (ohne Passwort)
+.PP
+tres0r keys list [\-h] [\-\-json] container
+.TP
+.B \-\-json
+Ergebnis als JSON auf stdout
+.SS "keys add\-password"
+weiteres Passwort hinzuf\[u00FC]gen
+.PP
+tres0r keys add\-password [\-h] [\-\-json] [\-\-password\-file DATEI] [\-i DATEI] [\-\-key\-passphrase\-file DATEI] [\-\-keyfile DATEI] [\-\-fido2] [\-\-share ANTEIL] [\-\-shares\-file DATEI] [\-g {passphrase,passwort}] [\-\-new\-password\-file DATEI] [\-\-offline] [\-y] [\-w WORDS] [\-n LENGTH] [\-\-wordlist {en,de}] [\-\-sep SEP] [\-\-capitalize] [\-\-digit] [\-\-no\-symbols] [\-\-no\-ambiguous] [\-\-new\-keyfile DATEI] [\-\-new\-fido2] [\-l {schnell,normal,stark,auto}] [\-\-kdf\-time SEK] container
+.TP
+.B \-\-json
+Ergebnis als JSON auf stdout
+.TP
+.B \-\-password\-file DATEI
+Passwort/Wiederherstellungsphrase aus erster Zeile ('\-' = stdin)
+.TP
+.B \-i, \-\-identity DATEI
+X25519\-Identit\[u00E4]t (mehrfach m\[u00F6]glich)
+.TP
+.B \-\-key\-passphrase\-file DATEI
+Passphrase f\[u00FC]r gesch\[u00FC]tzte Schl\[u00FC]sseldateien (sonst R\[u00FC]ckfrage)
+.TP
+.B \-\-keyfile DATEI
+Keyfile als zweiter Faktor (mehrfach m\[u00F6]glich)
+.TP
+.B \-\-fido2
+FIDO2\-Token als zweiten Faktor verwenden (Ber\[u00FC]hrung)
+.TP
+.B \-\-share ANTEIL
+Schwellwert\-Anteil (tres0r\-teil\-\[u2026]), mehrfach
+.TP
+.B \-\-shares\-file DATEI
+Datei mit Anteilen (einer pro Zeile)
+.TP
+.B \-g, \-\-generate GENERATE
+generieren statt eingeben
+.TP
+.B \-\-new\-password\-file DATEI
+erste Zeile als neues Passwort ('\-' = stdin)
+.TP
+.B \-\-offline
+keine HIBP\-Abfrage
+.TP
+.B \-y, \-\-yes
+generierte Geheimnisse nicht abtippen lassen
+.TP
+.B \-w, \-\-words WORDS
+W\[u00F6]rter je Passphrase (8\-40, Standard 8)
+.TP
+.B \-n, \-\-length LENGTH
+Zeichen je Passwort (8\-128, Standard 20)
+.TP
+.B \-\-wordlist WORDLIST
+Wortliste f\[u00FC]r Passphrasen und Wiederherstellung (Standard de)
+.TP
+.B \-\-sep SEP
+Trennzeichen (Standard '\-')
+.TP
+.B \-\-capitalize
+W\[u00F6]rter gro\[u00DF] beginnen lassen
+.TP
+.B \-\-digit
+Ziffer an die Passphrase anh\[u00E4]ngen
+.TP
+.B \-\-no\-symbols
+Passwort ohne Sonderzeichen
+.TP
+.B \-\-no\-ambiguous
+Passwort ohne mehrdeutige Zeichen (01IOl|)
+.TP
+.B \-\-new\-keyfile DATEI
+neues Passwort nur zusammen mit diesem Keyfile
+.TP
+.B \-\-new\-fido2
+neues Passwort nur zusammen mit dem gesteckten FIDO2\-Token
+.TP
+.B \-l, \-\-level LEVEL
+Stufe (Standard normal). schnell: \[u00D6]ffnen in Sekundenbruchteilen, geringer RAM\-Bedarf; normal: Guter Kompromiss f\[u00FC]r die meisten Rechner; stark: Maximaler Schutz gegen Passwort\-Raten, braucht 1 GiB RAM beim \[u00D6]ffnen; auto: auf \-\-kdf\-time kalibrieren
+.TP
+.B \-\-kdf\-time SEK
+Zielzeit f\[u00FC]r \-l auto in Sekunden (Standard 2.0)
+.SS "keys add\-shares"
+Schwellwert\-Slot hinzuf\[u00FC]gen (K von N)
+.PP
+tres0r keys add\-shares [\-h] [\-\-json] [\-\-password\-file DATEI] [\-i DATEI] [\-\-key\-passphrase\-file DATEI] [\-\-keyfile DATEI] [\-\-fido2] [\-\-share ANTEIL] [\-\-shares\-file DATEI] [\-\-shares\-dir ORDNER] [\-y] container K/N
+.TP
+.I K/N
+z. B. 2/3
+.TP
+.B \-\-json
+Ergebnis als JSON auf stdout
+.TP
+.B \-\-password\-file DATEI
+Passwort/Wiederherstellungsphrase aus erster Zeile ('\-' = stdin)
+.TP
+.B \-i, \-\-identity DATEI
+X25519\-Identit\[u00E4]t (mehrfach m\[u00F6]glich)
+.TP
+.B \-\-key\-passphrase\-file DATEI
+Passphrase f\[u00FC]r gesch\[u00FC]tzte Schl\[u00FC]sseldateien (sonst R\[u00FC]ckfrage)
+.TP
+.B \-\-keyfile DATEI
+Keyfile als zweiter Faktor (mehrfach m\[u00F6]glich)
+.TP
+.B \-\-fido2
+FIDO2\-Token als zweiten Faktor verwenden (Ber\[u00FC]hrung)
+.TP
+.B \-\-share ANTEIL
+Schwellwert\-Anteil (tres0r\-teil\-\[u2026]), mehrfach
+.TP
+.B \-\-shares\-file DATEI
+Datei mit Anteilen (einer pro Zeile)
+.TP
+.B \-\-shares\-dir ORDNER
+Anteile als einzelne Dateien ablegen
+.TP
+.B \-y, \-\-yes
+Anteile nur ausgeben, nicht ausblenden
+.SS "keys add\-recovery"
+Wiederherstellungsphrase hinzuf\[u00FC]gen
+.PP
+tres0r keys add\-recovery [\-h] [\-\-json] [\-\-password\-file DATEI] [\-i DATEI] [\-\-key\-passphrase\-file DATEI] [\-\-keyfile DATEI] [\-\-fido2] [\-\-share ANTEIL] [\-\-shares\-file DATEI] [\-w WORDS] [\-n LENGTH] [\-\-wordlist {en,de}] [\-\-sep SEP] [\-\-capitalize] [\-\-digit] [\-\-no\-symbols] [\-\-no\-ambiguous] [\-y] container
+.TP
+.B \-\-json
+Ergebnis als JSON auf stdout
+.TP
+.B \-\-password\-file DATEI
+Passwort/Wiederherstellungsphrase aus erster Zeile ('\-' = stdin)
+.TP
+.B \-i, \-\-identity DATEI
+X25519\-Identit\[u00E4]t (mehrfach m\[u00F6]glich)
+.TP
+.B \-\-key\-passphrase\-file DATEI
+Passphrase f\[u00FC]r gesch\[u00FC]tzte Schl\[u00FC]sseldateien (sonst R\[u00FC]ckfrage)
+.TP
+.B \-\-keyfile DATEI
+Keyfile als zweiter Faktor (mehrfach m\[u00F6]glich)
+.TP
+.B \-\-fido2
+FIDO2\-Token als zweiten Faktor verwenden (Ber\[u00FC]hrung)
+.TP
+.B \-\-share ANTEIL
+Schwellwert\-Anteil (tres0r\-teil\-\[u2026]), mehrfach
+.TP
+.B \-\-shares\-file DATEI
+Datei mit Anteilen (einer pro Zeile)
+.TP
+.B \-w, \-\-words WORDS
+W\[u00F6]rter je Passphrase (8\-40, Standard 8)
+.TP
+.B \-n, \-\-length LENGTH
+Zeichen je Passwort (8\-128, Standard 20)
+.TP
+.B \-\-wordlist WORDLIST
+Wortliste f\[u00FC]r Passphrasen und Wiederherstellung (Standard de)
+.TP
+.B \-\-sep SEP
+Trennzeichen (Standard '\-')
+.TP
+.B \-\-capitalize
+W\[u00F6]rter gro\[u00DF] beginnen lassen
+.TP
+.B \-\-digit
+Ziffer an die Passphrase anh\[u00E4]ngen
+.TP
+.B \-\-no\-symbols
+Passwort ohne Sonderzeichen
+.TP
+.B \-\-no\-ambiguous
+Passwort ohne mehrdeutige Zeichen (01IOl|)
+.TP
+.B \-y, \-\-yes
+Phrase nicht abfragen
+.SS "keys add\-recipient"
+Empf\[u00E4]nger hinzuf\[u00FC]gen
+.PP
+tres0r keys add\-recipient [\-h] [\-\-json] [\-\-password\-file DATEI] [\-i DATEI] [\-\-key\-passphrase\-file DATEI] [\-\-keyfile DATEI] [\-\-fido2] [\-\-share ANTEIL] [\-\-shares\-file DATEI] [\-r SCHL\[u00DC]SSEL] [\-R DATEI] container
+.TP
+.B \-\-json
+Ergebnis als JSON auf stdout
+.TP
+.B \-\-password\-file DATEI
+Passwort/Wiederherstellungsphrase aus erster Zeile ('\-' = stdin)
+.TP
+.B \-i, \-\-identity DATEI
+X25519\-Identit\[u00E4]t (mehrfach m\[u00F6]glich)
+.TP
+.B \-\-key\-passphrase\-file DATEI
+Passphrase f\[u00FC]r gesch\[u00FC]tzte Schl\[u00FC]sseldateien (sonst R\[u00FC]ckfrage)
+.TP
+.B \-\-keyfile DATEI
+Keyfile als zweiter Faktor (mehrfach m\[u00F6]glich)
+.TP
+.B \-\-fido2
+FIDO2\-Token als zweiten Faktor verwenden (Ber\[u00FC]hrung)
+.TP
+.B \-\-share ANTEIL
+Schwellwert\-Anteil (tres0r\-teil\-\[u2026]), mehrfach
+.TP
+.B \-\-shares\-file DATEI
+Datei mit Anteilen (einer pro Zeile)
+.TP
+.B \-r, \-\-recipient SCHL\[u00DC]SSEL
+
+.TP
+.B \-R, \-\-recipients\-file DATEI
+
+.SS "keys remove"
+Keyslot entfernen
+.PP
+tres0r keys remove [\-h] [\-\-json] [\-\-password\-file DATEI] [\-i DATEI] [\-\-key\-passphrase\-file DATEI] [\-\-keyfile DATEI] [\-\-fido2] [\-\-share ANTEIL] [\-\-shares\-file DATEI] container SLOT
+.TP
+.I SLOT
+Nummer laut 'keys list'
+.TP
+.B \-\-json
+Ergebnis als JSON auf stdout
+.TP
+.B \-\-password\-file DATEI
+Passwort/Wiederherstellungsphrase aus erster Zeile ('\-' = stdin)
+.TP
+.B \-i, \-\-identity DATEI
+X25519\-Identit\[u00E4]t (mehrfach m\[u00F6]glich)
+.TP
+.B \-\-key\-passphrase\-file DATEI
+Passphrase f\[u00FC]r gesch\[u00FC]tzte Schl\[u00FC]sseldateien (sonst R\[u00FC]ckfrage)
+.TP
+.B \-\-keyfile DATEI
+Keyfile als zweiter Faktor (mehrfach m\[u00F6]glich)
+.TP
+.B \-\-fido2
+FIDO2\-Token als zweiten Faktor verwenden (Ber\[u00FC]hrung)
+.TP
+.B \-\-share ANTEIL
+Schwellwert\-Anteil (tres0r\-teil\-\[u2026]), mehrfach
+.TP
+.B \-\-shares\-file DATEI
+Datei mit Anteilen (einer pro Zeile)
+.SS "genpass"
+Passwort/Passphrase generieren (pwgen)
+.PP
+tres0r genpass [\-h] [\-\-json] [\-w WORDS] [\-n LENGTH] [\-\-wordlist {en,de}] [\-\-sep SEP] [\-\-capitalize] [\-\-digit] [\-\-no\-symbols] [\-\-no\-ambiguous] [\-c COUNT] [{passphrase,passwort}]
+.TP
+.B \-\-json
+Ergebnis als JSON auf stdout
+.TP
+.B \-w, \-\-words WORDS
+W\[u00F6]rter je Passphrase (8\-40, Standard 8)
+.TP
+.B \-n, \-\-length LENGTH
+Zeichen je Passwort (8\-128, Standard 20)
+.TP
+.B \-\-wordlist WORDLIST
+Wortliste f\[u00FC]r Passphrasen und Wiederherstellung (Standard de)
+.TP
+.B \-\-sep SEP
+Trennzeichen (Standard '\-')
+.TP
+.B \-\-capitalize
+W\[u00F6]rter gro\[u00DF] beginnen lassen
+.TP
+.B \-\-digit
+Ziffer an die Passphrase anh\[u00E4]ngen
+.TP
+.B \-\-no\-symbols
+Passwort ohne Sonderzeichen
+.TP
+.B \-\-no\-ambiguous
+Passwort ohne mehrdeutige Zeichen (01IOl|)
+.TP
+.B \-c, \-\-count COUNT
+Anzahl (Standard 1)
+.SS "checkpass"
+Passwort pr\[u00FC]fen (L\[u00E4]nge, Zeichenarten, HIBP)
+.PP
+tres0r checkpass [\-h] [\-\-json] [\-\-password\-file DATEI] [\-\-offline]
+.TP
+.B \-\-json
+Ergebnis als JSON auf stdout
+.TP
+.B \-\-password\-file DATEI
+
+.TP
+.B \-\-offline
+keine HIBP\-Abfrage
+.SS "bench"
+Stufen, \-l auto und Durchsatz auf diesem Rechner messen
+.PP
+tres0r bench [\-h] [\-\-json] [\-\-kdf\-time SEK] [\-\-throughput] [\-\-dir ORDNER] [\-\-size MiB]
+.TP
+.B \-\-json
+Ergebnis als JSON auf stdout
+.TP
+.B \-\-kdf\-time SEK
+Zielzeit f\[u00FC]r den auto\-Vorschlag
+.TP
+.B \-\-throughput
+zus\[u00E4]tzlich pack/verify mit und ohne Threads messen
+.TP
+.B \-\-dir ORDNER
+Ordner f\[u00FC]r die Testdaten (Standard: tempor\[u00E4]r)
+.TP
+.B \-\-size MiB
+Gr\[u00F6]\[u00DF]e der Testdaten (Standard 256)
+.SH EXIT\-CODES
+.TP
+.B 0
+Erfolg.
+.TP
+.B 1
+Fehler oder Abbruch.
+.TP
+.B 2
+Falsches Passwort bzw. kein passender Schl\[u00FC]ssel.
+.TP
+.B 3
+Container besch\[u00E4]digt, manipuliert oder unsicher; Signatur fehlt oder ist falsch.
+.TP
+.B 4
+diff: Unterschiede gefunden.
+.TP
+.B 130
+Abbruch mit Strg+C.
+.SH SIEHE AUCH
+FORMAT.md (Containerformat 1.0), API.md (Python\-API), README.md.

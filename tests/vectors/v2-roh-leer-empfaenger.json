@@ -1,0 +1,27 @@
+{
+ "name": "v2-roh-leer-empfaenger",
+ "format_version": 2,
+ "reproducible": true,
+ "inputs": {
+  "password": "Korrekt Pferd Batterie Heftklammer",
+  "recovery": "Wald See Berg Tal Fluss Dorf Feld Hain Moor Heide Bach Quelle Hang Kamm Grat Sattel Gipfel HÜTTE Weide Alm",
+  "identity": "TRES0R-SECRET-PGJKKNJZRNM6EDNPK52BN2JDWBFQZ3GZJBWGCZ3RPFKG6M3QWDZI6KG3UI",
+  "kdf": {
+   "m_kib": 8192,
+   "t": 1,
+   "p": 1
+  }
+ },
+ "unlock": {
+  "identity": 0
+ },
+ "container_hex": "5452533002008e0100005ce4fffbb35e1dd4cc8bd7e756f00e550103005080223d3655df10f8ac32032a6c27bb21b31b72a096c65c061e7e707be6b182568368fc576250e3197919e7b746fa47e9c976aa05ddfe398516b66c51b87baef4151396397ccfbdec9e583916ac5616e1b37c5453d4ff67cc528d24a2dffd1f0e43df9d70223259aa2c96565532bd267f68289a99be94c9708d8f7a2291d35f1a4ae3123f",
+ "data": {
+  "label": "leer",
+  "length": 0
+ },
+ "expected": {
+  "dek_hex": "b2313cde0aabf29b3d355871ec810c758ec906aba7f50ca98eee1a95a646abe5",
+  "data_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+ }
+}

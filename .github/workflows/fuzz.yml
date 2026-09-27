@@ -1,0 +1,46 @@
+name: Fuzzing
+
+on:
+  schedule:
+    - cron: "17 3 * * 1"  # montags früh
+  workflow_dispatch:
+    inputs:
+      minutes:
+        description: "Minuten je Fuzzer"
+        default: "5"
+
+permissions:
+  contents: read
+
+jobs:
+  fuzz:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"  # atheris hat hierfür fertige Pakete
+      - run: python -m pip install -e ".[dev,zstd,fuzz]"
+      - run: python fuzz/make_seeds.py
+      - name: Fuzzer (Container mit Mehrkern-Pfaden, Header, Text)
+        env:
+          SECONDS_EACH: ${{ github.event.inputs.minutes || '5' }}
+        run: |
+          t=$(( SECONDS_EACH * 60 ))
+          mkdir -p crashes
+          python fuzz/fuzz_container.py fuzz/corpus/container -max_total_time=$t -max_len=20000 \
+            -rss_limit_mb=3072 -timeout=30 -artifact_prefix=crashes/container-
+          python fuzz/fuzz_header.py fuzz/corpus/header -max_total_time=$t -rss_limit_mb=2048 \
+            -artifact_prefix=crashes/header-
+          python fuzz/fuzz_text.py fuzz/corpus/text -max_total_time=$t -artifact_prefix=crashes/text-
+      - name: Property-Tests gründlich (5000 Beispiele, 4 simulierte Kerne)
+        run: python -m pytest -q tests/test_properties.py
+        env:
+          HYPOTHESIS_PROFILE: fuzz
+          TRES0R_TEST_CPUS: "4"
+      - name: Funde sichern
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: fuzz-funde
+          path: crashes/

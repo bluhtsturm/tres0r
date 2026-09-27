@@ -1,0 +1,27 @@
+# Python
+__pycache__/
+*.py[co]
+*.egg-info/
+build/
+dist/
+.venv/
+venv/
+
+# Tests und Werkzeuge
+.pytest_cache/
+.hypothesis/
+.coverage
+.coverage.*
+htmlcov/
+
+# Fuzzing: Korpus wird von fuzz/make_seeds.py erzeugt, Funde nicht einchecken
+fuzz/corpus/
+crash-*
+timeout-*
+leak-*
+
+# Container und Reste abgebrochener Läufe (Testvektoren liegen als JSON vor)
+*.tres0r
+*.tres0r.[0-9][0-9][0-9]
+*.partial
+.*.tres0r-append

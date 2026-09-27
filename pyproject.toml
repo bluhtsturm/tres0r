@@ -1,0 +1,69 @@
+[build-system]
+requires = ["setuptools>=77"]  # PEP 639: SPDX-Lizenzausdruck
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "tres0r"
+version = "1.0.0rc7"
+description = "Dateien, Ordner und Datenströme verschlüsseln – Argon2id + ChaCha20-Poly1305, mehrere Schlüssel, Signaturen, Anhängen, Einhängen"
+readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
+requires-python = ">=3.10"
+dependencies = ["cryptography>=44"]
+authors = [{ name = "Julian (bluhtsturm)" }]
+keywords = ["encryption", "verschlüsselung", "argon2", "chacha20-poly1305", "backup", "container", "fido2"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Environment :: Console",
+    "Environment :: X11 Applications :: Qt",
+    "Intended Audience :: End Users/Desktop",
+    "Intended Audience :: System Administrators",
+    "Natural Language :: German",
+    "Operating System :: POSIX :: Linux",
+    "Operating System :: Microsoft :: Windows",
+    "Operating System :: MacOS",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+    "Topic :: Security :: Cryptography",
+    "Topic :: System :: Archiving :: Backup",
+]
+
+[project.urls]
+Homepage = "https://github.com/bluhtsturm/tres0r"
+Repository = "https://github.com/bluhtsturm/tres0r"
+Issues = "https://github.com/bluhtsturm/tres0r/issues"
+Changelog = "https://github.com/bluhtsturm/tres0r/blob/main/CHANGELOG.md"
+Specification = "https://github.com/bluhtsturm/tres0r/blob/main/FORMAT.md"
+
+[project.optional-dependencies]
+# Fallback, falls cryptography gegen ein System-OpenSSL ohne Argon2 gebaut ist
+argon2 = ["argon2-cffi>=21.2"]
+# zstd-Kompression: ab Python 3.14 in der Standardbibliothek, davor über dieses Paket
+zstd = ["zstandard>=0.22; python_version < '3.14'"]
+dev = ["pytest>=7", "argon2-cffi>=21.2", "zstandard>=0.22", "hypothesis>=6.100"]
+fuzz = ["atheris>=2.3"]
+# tres0r mount: zusätzlich libfuse2 (Linux) bzw. macFUSE (macOS) nötig
+mount = ["fusepy>=3.0"]
+# Grafische Oberfläche: tres0r gui
+gui = ["PySide6-Essentials>=6.8"]
+# Textoberfläche: tres0r tui
+tui = ["textual>=8.0"]
+# FIDO2-Token als zweiter Faktor (hmac-secret)
+fido2 = ["fido2>=2.0"]
+
+[project.scripts]
+tres0r = "tres0r.cli:main"
+
+[tool.setuptools]
+packages = ["tres0r"]
+
+[tool.setuptools.package-data]
+tres0r = ["wordlists/*.txt", "wordlists/*.md"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
