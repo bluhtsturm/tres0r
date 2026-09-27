@@ -1,0 +1,3 @@
+# Überall LF auschecken – unter Windows machte core.autocrlf sonst CRLF daraus
+# (CI-Fund: Prüfsumme von tres0r/pwgen.py, erzeugte Dateien).
+* text=auto eol=lf

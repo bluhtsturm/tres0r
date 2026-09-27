@@ -132,7 +132,12 @@ def generate_passphrase(
     append_digit: bool = False,
     wordlist: Sequence[str] | None = None,
 ) -> Secret:
-    """Passphrase aus ``words`` Wörtern der Liste ``lang`` (oder ``wordlist``), getrennt durch ``separator``; optional ``capitalize``/``append_digit``."""
+    """Passphrase aus ``words`` Wörtern der Liste ``lang`` (oder ``wordlist``), getrennt durch ``separator``; optional ``capitalize``/``append_digit``.
+
+    Wörter, die das Trennzeichen enthalten (z. B. "t-shirt" in der englischen Liste),
+    bleiben außen vor – sonst wären die Wortgrenzen mehrdeutig. Die Entropie zählt
+    nur die tatsächlich verwendbaren Wörter.
+    """
     if not PASSPHRASE_MIN_WORDS <= words <= PASSPHRASE_MAX_WORDS:
         raise ValueError(
             f"Wortanzahl muss zwischen {PASSPHRASE_MIN_WORDS} und {PASSPHRASE_MAX_WORDS} liegen."
@@ -140,6 +145,7 @@ def generate_passphrase(
     if not separator:
         raise ValueError("Trennzeichen darf nicht leer sein (sonst sind Wortgrenzen mehrdeutig).")
     pool = tuple(dict.fromkeys(wordlist)) if wordlist is not None else load_wordlist(lang)
+    pool = tuple(w for w in pool if separator not in (w.capitalize() if capitalize else w))
     if len(pool) < 2:
         raise ValueError("Wortliste ist zu klein.")
     value = pwgen.generate_passphrase(pool, words, separator, capitalize, append_digit)

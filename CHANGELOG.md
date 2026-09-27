@@ -1,5 +1,29 @@
 # Changelog
 
+## Unveröffentlicht
+
+### Behoben (Befunde der ersten GitHub-CI)
+
+* **Passphrasen mit Bindestrich-Wörtern:** Die englische EFF-Liste enthält
+  `drop-down`, `felt-tip`, `t-shirt` und `yo-yo`. Mit `-` als Trenner zerfiel eine
+  Phrase dann in zu viele Teile – bei englischen Wiederherstellungsphrasen zeigte
+  die CLI 21 nummerierte „Wörter“ und fragte zur Kontrolle das falsche Wort ab.
+  Wörter, die das Trennzeichen enthalten, werden jetzt nicht mehr gewählt; die
+  Entropie rechnet mit der tatsächlich genutzten Liste (7772 statt 7776 Wörter,
+  0,001 Bit je Wort weniger). Mit anderem Trenner bleiben sie erlaubt.
+* **bash-Vervollständigung unter macOS** (`/bin/bash` 3.2) war komplett unbrauchbar:
+  `declare -gA` und `@(…)`-Muster gibt es dort nicht bzw. erst nach `shopt -s
+  extglob`. Das Skript kommt jetzt ohne beides aus und verstellt keine Optionen der
+  Shell mehr. Nebenbei: Dateinamen mit Leerzeichen werden nicht mehr in zwei
+  Vorschläge zerlegt.
+* **Windows:** Speicheradressen in Standardwerten stehen dort in Großbuchstaben
+  (`0x…B08360`) – die Normalisierung für API-Schnappschuss und `API.md` kannte nur
+  Kleinbuchstaben. `.gitattributes` erzwingt LF beim Auschecken (sonst änderte
+  `core.autocrlf` die Prüfsumme von `pwgen.py`). Die übrigen Windows-Funde lagen in
+  den Tests: Pfadtrenner im Vergleichs-Helfer, Textdateien mit Locale-Kodierung bzw.
+  CRLF, `was?.txt` ist unter Windows nicht anlegbar, keine Unix-Rechte, der
+  WSL-Platzhalter `bash.exe` und ein Textual-Zeitproblem (Knopf noch nicht eingehängt).
+
 ## 1.0.0rc7 – bereit für GitHub
 
 Keine Änderung am Programmverhalten.

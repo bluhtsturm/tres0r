@@ -26,7 +26,7 @@ def tree(tmp_path):
     root = tmp_path / "quelle" / "Daten"
     (root / "unter").mkdir(parents=True)
     (root / "gross.bin").write_bytes(os.urandom(2_500_000))
-    (root / "unter" / "text.txt").write_text("hallo\n" * 1000)
+    (root / "unter" / "text.txt").write_bytes(b"hallo\n" * 1000)
     (root / "leer").write_bytes(b"")
     if os.name == "posix":
         os.symlink("unter/text.txt", root / "verweis")
