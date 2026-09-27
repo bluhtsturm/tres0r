@@ -114,14 +114,19 @@ def test_pack_name_warnings_and_strict(tmp_path, pwfile, capsys):
     src = tmp_path / "quelle"
     src.mkdir()
     (src / "aux.txt").write_text("x")
-    (src / "was?.txt").write_text("y")
+    expected = {"quelle/aux.txt"}
+    try:
+        (src / "was?.txt").write_text("y")
+        expected.add("quelle/was?.txt")
+    except OSError:  # unter Windows gar nicht anlegbar
+        pass
     base = ["pack", str(src), "-l", "schnell", "--password-file", pwfile, "--offline"]
     assert main([*base, "-o", str(tmp_path / "s.tres0r"), "--strict-names"]) == 1
     assert not (tmp_path / "s.tres0r").exists()
     capsys.readouterr()
 
     code, data, _ = run_json(capsys, [*base, "-o", str(tmp_path / "w.tres0r")])
-    assert code == 0 and {i["path"] for i in data["name_issues"]} == {"quelle/aux.txt", "quelle/was?.txt"}
+    assert code == 0 and {i["path"] for i in data["name_issues"]} == expected
 
 
 def test_unpack_rename(tmp_path, capsys):

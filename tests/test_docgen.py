@@ -33,18 +33,48 @@ def test_manpage_renders_without_warnings():
     assert run.returncode == 0 and not run.stderr, run.stderr.decode()
 
 
-@pytest.mark.skipif(shutil.which("bash") is None, reason="bash fehlt")
+def _working_bash() -> str | None:
+    """Pfad einer lauffähigen bash – unter Windows ist ``bash.exe`` oft nur der
+    WSL-Platzhalter ohne Distribution (CI-Fund: UTF-16-Fehlermeldung statt Ausgabe)."""
+    path = shutil.which("bash")
+    if path is None:
+        return None
+    try:
+        run = subprocess.run([path, "-c", "echo ok"], capture_output=True, text=True, timeout=30)
+    except (OSError, subprocess.SubprocessError):
+        return None
+    return path if run.returncode == 0 and run.stdout.strip() == "ok" else None
+
+
+BASH = _working_bash()
+
+
+def test_bash_completion_avoids_bash4_features():
+    """CI-Fund (macOS, /bin/bash 3.2): ``declare -gA`` und @(…)-Muster vor ``shopt -s
+    extglob`` machten das ganze Skript unbrauchbar. Hier ohne bash 3.2 geprüft."""
+    script = docgen.bash_completion()
+    for construct in ("declare -A", "declare -gA", "local -A", "@(", "shopt", "mapfile", "readarray",
+                      ";;&", ",,}", "^^}", "|&"):
+        assert construct not in script, construct
+
+
+@pytest.mark.skipif(BASH is None, reason="keine lauffähige bash")
 def test_bash_completion_suggestions(tmp_path):
     script = tmp_path / "t.sh"
     (tmp_path / "Backup.tres0r").write_text("x")
+    (tmp_path / "Meine Datei.tres0r").write_text("x")
     script.write_text(docgen.bash_completion() + '''
 try() { COMP_WORDS=("$@"); COMP_CWORD=$((${#COMP_WORDS[@]} - 1)); COMPREPLY=(); _tres0r; echo "${COMPREPLY[*]}"; }
 try tres0r pa; try tres0r keys add-sh; try tres0r pack --comp; try tres0r pack -l ""; try tres0r completion ""
-try tres0r pack -o Back
-''')
-    out = subprocess.run(["bash", str(script)], capture_output=True, text=True, cwd=tmp_path).stdout.splitlines()
-    assert out == ["pack passwd", "add-shares", "--compress", "schnell normal stark auto", "bash zsh",
-                   "Backup.tres0r"]
+try tres0r pack -o Back; try tres0r keys add-shares --shares-d; try tres0r pack --wordlist ""; try tres0r unpack -o Back
+try tres0r pack --json Back
+COMP_WORDS=(tres0r unpack Mei); COMP_CWORD=2; _tres0r; echo "${#COMPREPLY[@]}:${COMPREPLY[0]}"
+''', encoding="utf-8", newline="\n")
+    run = subprocess.run([BASH, str(script)], capture_output=True, text=True, cwd=tmp_path)
+    assert run.stdout.splitlines() == ["pack passwd", "add-shares", "--compress", "schnell normal stark auto",
+                                       "bash zsh", "Backup.tres0r", "--shares-dir", "en de", "Backup.tres0r",
+                                       "Backup.tres0r", "1:Meine Datei.tres0r"], run.stderr
+    assert not run.stderr
 
 
 @pytest.mark.skipif(shutil.which("zsh") is None, reason="zsh fehlt")

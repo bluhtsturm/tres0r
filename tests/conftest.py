@@ -50,7 +50,7 @@ def sample_tree(tmp_path):
     root = tmp_path / "quelle" / "Projekt"
     (root / "Unterordner" / "tief").mkdir(parents=True)
     (root / "leer").mkdir()
-    (root / "notiz.txt").write_text("Hallo Welt\n", encoding="utf-8")
+    (root / "notiz.txt").write_text("Hallo Welt\n", encoding="utf-8", newline="\n")  # auch unter Windows 11 Byte
     (root / "Überraschung ä ö ü ß.txt").write_text("Umlaute im Namen", encoding="utf-8")
     (root / "leere-datei").write_bytes(b"")
     (root / "Unterordner" / "gross.bin").write_bytes(os.urandom(300_000))  # ~4,6 Chunks
@@ -61,15 +61,18 @@ def sample_tree(tmp_path):
 
 
 def snapshot(path):
-    """{relativer Pfad: Inhalt | None für Ordner} für Vergleiche."""
+    """{relativer Pfad mit "/": Inhalt | None für Ordner} für Vergleiche."""
+    def key(rel, name):
+        return os.path.normpath(os.path.join(rel, name)).replace(os.sep, "/")
+
     result = {}
     for dirpath, dirnames, filenames in os.walk(path):
         rel = os.path.relpath(dirpath, path)
         for d in dirnames:
-            result[os.path.normpath(os.path.join(rel, d))] = None
+            result[key(rel, d)] = None
         for f in filenames:
             with open(os.path.join(dirpath, f), "rb") as fh:
-                result[os.path.normpath(os.path.join(rel, f))] = fh.read()
+                result[key(rel, f)] = fh.read()
     return result
 
 

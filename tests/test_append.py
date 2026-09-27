@@ -25,7 +25,7 @@ def work(tmp_path):
     (tmp_path / "alt" / "notiz.txt").write_text("erste Fassung")
     (tmp_path / "alt" / "bild.bin").write_bytes(os.urandom(200_000))
     (tmp_path / "neu").mkdir()
-    (tmp_path / "neu" / "notiz.txt").write_text("zweite Fassung, länger")
+    (tmp_path / "neu" / "notiz.txt").write_text("zweite Fassung, länger", encoding="utf-8")
     (tmp_path / "neu" / "extra.txt").write_text("extra")
     out = pack([tmp_path / "alt" / "notiz.txt", tmp_path / "alt" / "bild.bin"], tmp_path / "c.tres0r")
     return tmp_path, out
@@ -50,10 +50,10 @@ def test_append_keeps_existing_bytes_and_newer_wins(work):
     checked = container.verify(out, PASSWORD)
     assert checked.segments == 2 and checked.files == 4
     container.extract(out, tmp / "z", PASSWORD)
-    assert (tmp / "z" / "notiz.txt").read_text() == "zweite Fassung, länger"
+    assert (tmp / "z" / "notiz.txt").read_text(encoding="utf-8") == "zweite Fassung, länger"
     assert sorted(os.listdir(tmp / "z")) == ["bild.bin", "extra.txt", "notiz.txt"]
     container.extract(out, tmp / "nur", PASSWORD, only=["notiz.txt"])
-    assert (tmp / "nur" / "notiz.txt").read_text() == "zweite Fassung, länger"
+    assert (tmp / "nur" / "notiz.txt").read_text(encoding="utf-8") == "zweite Fassung, länger"
     fs = ContainerFS(out, PASSWORD)
     assert fs.open("/notiz.txt").read(0, 100) == b"zweite Fassung, l\xc3\xa4nger"
     fs.close()

@@ -166,31 +166,36 @@ def _shell_word(text: str) -> str:
 
 
 def bash_completion(parser: argparse.ArgumentParser | None = None) -> str:
+    """bash-Vervollständigung. Läuft auch mit bash 3.2 (macOS): keine assoziativen
+    Arrays, kein extglob (verstellt sonst Optionen der Shell des Nutzers)."""
     from .cli import build_parser
 
     parser = parser or build_parser()
     top = list(_subparsers(parser))
+    nested = {name: " ".join(_subparsers(sub)) for name, sub, _ in _commands(parser) if _subparsers(sub)}
     lines = ["# bash-Vervollständigung für tres0r – erzeugt von tres0r.docgen, nicht von Hand ändern",
              "_tres0r() {",
              '    local cur="${COMP_WORDS[COMP_CWORD]}" prev="${COMP_WORDS[COMP_CWORD-1]}"',
-             '    local cmd="" sub="" i word opts="" values="" choices="" positional=""',
+             '    local cmd="" sub="" nested="" i word opts="" values="" choices="" positional=""',
              "    for ((i = 1; i < COMP_CWORD; i++)); do",
              '        word="${COMP_WORDS[i]}"',
              '        [[ $word == -* ]] && continue',
-             '        if [[ -z $cmd ]]; then cmd="$word"',
-             '        elif [[ -z $sub && -n ${_TRES0R_NESTED[$cmd]} ]]; then sub="$word"; fi',
-             "    done",
-             '    if [[ -z $cmd ]]; then',
-             f'        COMPREPLY=($(compgen -W "{" ".join(top)} --help --version" -- "$cur")); return',
-             "    fi",
-             '    if [[ -n ${_TRES0R_NESTED[$cmd]} && -z $sub ]]; then',
-             '        COMPREPLY=($(compgen -W "${_TRES0R_NESTED[$cmd]}" -- "$cur")); return',
-             "    fi",
-             '    case "$cmd${sub:+ $sub}" in']
-    nested = {}
+             '        if [[ -z $cmd ]]; then',
+             '            cmd="$word"',
+             '            case "$cmd" in']
+    lines += [f'                {name}) nested="{words}" ;;' for name, words in nested.items()]
+    lines += ["            esac",
+              '        elif [[ -z $sub && -n $nested ]]; then sub="$word"; fi',
+              "    done",
+              '    if [[ -z $cmd ]]; then',
+              f'        COMPREPLY=($(compgen -W "{" ".join(top)} --help --version" -- "$cur")); return',
+              "    fi",
+              '    if [[ -n $nested && -z $sub ]]; then',
+              '        COMPREPLY=($(compgen -W "$nested" -- "$cur")); return',
+              "    fi",
+              '    case "$cmd${sub:+ $sub}" in']
     for name, sub, _ in _commands(parser):
-        if _subparsers(sub):
-            nested[name] = " ".join(_subparsers(sub))
+        if name in nested:
             continue
         options = _options(sub)
         flags = " ".join(f for a in options for f in a.option_strings)
@@ -200,21 +205,25 @@ def bash_completion(parser: argparse.ArgumentParser | None = None) -> str:
         fixed = [str(c) for a in _positionals(sub) if a.choices for c in a.choices]
         if fixed:
             lines.append(f'            positional="{" ".join(fixed)}"')
-        for action in options:
-            if action.choices:
+        with_choices = [a for a in options if a.choices]
+        if with_choices:
+            lines.append('            case "$prev" in')
+            for action in with_choices:
                 pattern = "|".join(action.option_strings)
                 words = " ".join(str(c) for c in action.choices)
-                lines.append(f'            [[ $prev == @({pattern}) ]] && choices="{words}"')
+                lines.append(f'                {pattern}) choices="{words}" ;;')
+            lines.append("            esac")
         lines.append("            ;;")
     lines += ["    esac",
               '    if [[ -n $choices ]]; then COMPREPLY=($(compgen -W "$choices" -- "$cur")); return; fi',
-              '    if [[ -n $values && $prev == @($values) ]]; then COMPREPLY=($(compgen -f -- "$cur")); return; fi',
+              # Dateinamen zeilenweise trennen – sonst zerfällt "Meine Datei" in zwei Vorschläge
+              '    if [[ -n $values && "|$values|" == *"|$prev|"* ]]; then',
+              "        local IFS=$'\\n'; COMPREPLY=($(compgen -f -- \"$cur\")); return",
+              "    fi",
               '    if [[ $cur == -* ]]; then COMPREPLY=($(compgen -W "$opts" -- "$cur"))',
               '    elif [[ -n $positional ]]; then COMPREPLY=($(compgen -W "$positional" -- "$cur"))',
-              '    else COMPREPLY=($(compgen -f -- "$cur")); fi',
+              "    else local IFS=$'\\n'; COMPREPLY=($(compgen -f -- \"$cur\")); fi",
               "}",
-              "declare -gA _TRES0R_NESTED=(" + " ".join(f'[{k}]="{v}"' for k, v in nested.items()) + ")",
-              "shopt -s extglob",
               "complete -o filenames -o bashdefault -F _tres0r tres0r"]
     return "\n".join(lines) + "\n"
 
@@ -348,7 +357,7 @@ def _plain_signature(obj) -> str:
         return "(…)"
     parameters = [p.replace(annotation=inspect.Parameter.empty) for p in signature.parameters.values()]
     text = str(signature.replace(parameters=parameters, return_annotation=inspect.Signature.empty))
-    return re.sub(r" at 0x[0-9a-f]+", "", text)
+    return re.sub(r" at 0x[0-9a-fA-F]+", "", text)  # Windows: Großbuchstaben
 
 
 def _type_text(tp) -> str:

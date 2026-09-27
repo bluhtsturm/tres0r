@@ -74,6 +74,22 @@ def test_passphrase_digit_and_capitalize():
     assert not secret.strong_enough
 
 
+def test_passphrase_words_never_contain_separator():
+    """CI-Fund: die EFF-Liste enthält "t-shirt", "yo-yo" … – mit "-" als Trenner
+    zerfiel die Phrase in zu viele Teile (auch die Wortabfrage der Wiederherstellung)."""
+    secret = passgen.generate_passphrase(8, wordlist=["t-shirt", "yo-yo", "eins", "zwei"], separator="-")
+    assert set(secret.value.split("-")) <= {"eins", "zwei"} and len(secret.value.split("-")) == 8
+    assert secret.entropy_bits == pytest.approx(8.0)
+    hyphenated = [w for w in passgen.load_wordlist("en") if "-" in w]
+    assert hyphenated  # sonst prüft der Rest nichts
+    english = passgen.generate_passphrase(8, lang="en")
+    assert english.entropy_bits == pytest.approx(8 * math.log2(7776 - len(hyphenated)))
+    # mit anderem Trenner bleiben sie erlaubt
+    assert passgen.generate_passphrase(8, lang="en", separator=" ").entropy_bits == pytest.approx(8 * math.log2(7776))
+    with pytest.raises(ValueError):
+        passgen.generate_passphrase(8, wordlist=["a-b", "c-d", "e"], separator="-")
+
+
 def test_empty_separator_rejected():
     with pytest.raises(ValueError):
         passgen.generate_passphrase(8, separator="")

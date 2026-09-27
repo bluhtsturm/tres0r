@@ -283,7 +283,9 @@ def test_pin_dialog_cancel_aborts_cleanly(project, tmp_path, monkeypatch):
 
 
 async def unlock(app, pilot, password=PASSWORD):
-    await until(pilot, lambda: isinstance(app.screen, tui.UnlockScreen))
+    # Knöpfe in verschachtelten Containern werden später eingehängt als das Passwortfeld
+    # (Windows-CI: "#unlock" fehlte noch) – auf das vollständige Fenster warten.
+    await until(pilot, lambda: isinstance(app.screen, tui.UnlockScreen) and bool(app.screen.query("#unlock")))
     app.screen.query_one("#password", Input).value = password
     await pilot.click("#unlock")
 
@@ -357,7 +359,9 @@ def test_key_management(project, tmp_path):
     container.verify(out, state["phrase"])
     container.verify(out, Credentials(shares=[shamir.parse_share(t) for t in state["shares"]]))
     stored = (saved / "geheimnis-1.txt").read_text(encoding="utf-8")
-    assert state["phrase"] in stored and oct(os.stat(saved / "geheimnis-1.txt").st_mode & 0o777) == "0o600"
+    assert state["phrase"] in stored
+    if os.name == "posix":  # Windows kennt keine Unix-Rechte
+        assert oct(os.stat(saved / "geheimnis-1.txt").st_mode & 0o777) == "0o600"
 
 
 def test_append_diff_and_search(project, tmp_path):

@@ -77,6 +77,15 @@ def test_recovery_phrase_and_canonical_form():
     assert keys.canonical_secret(" " + phrase.value.replace("-", " - ") + "\n") == canon
 
 
+def test_english_recovery_phrase_has_exactly_20_words(monkeypatch):
+    """CI-Fund: "t-shirt" aus der EFF-Liste machte 21 "Wörter" (Anzeige, Wortabfrage)."""
+    from tres0r import pwgen
+    # Zufall so lenken, dass ein Wort mit Bindestrich gewählt würde, wenn es in der Auswahl wäre
+    monkeypatch.setattr(pwgen.secrets, "choice", lambda seq: next((w for w in seq if "-" in w), seq[0]))
+    phrase = keys.generate_recovery("en")
+    assert len(phrase.value.split("-")) == keys.RECOVERY_WORDS
+
+
 def test_credentials_prompt_is_lazy():
     calls = []
     creds = Credentials(prompt=lambda: calls.append(1) or "x")

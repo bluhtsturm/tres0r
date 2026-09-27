@@ -38,7 +38,7 @@ def _signature(obj) -> str:
         text = str(inspect.signature(obj))
     except (TypeError, ValueError):
         return "(…)"
-    return re.sub(r" at 0x[0-9a-f]+", "", text)  # Speicheradressen in Standardwerten
+    return re.sub(r" at 0x[0-9a-fA-F]+", "", text)  # Speicheradressen (Windows: Großbuchstaben)
 
 
 def _describe(obj) -> str:

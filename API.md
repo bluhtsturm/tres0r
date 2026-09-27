@@ -849,6 +849,10 @@ Wie pwgen: Klein-, Großbuchstaben und Ziffern immer, Sonderzeichen optional.
 
 Passphrase aus ``words`` Wörtern der Liste ``lang`` (oder ``wordlist``), getrennt durch ``separator``; optional ``capitalize``/``append_digit``.
 
+Wörter, die das Trennzeichen enthalten (z. B. "t-shirt" in der englischen Liste),
+bleiben außen vor – sonst wären die Wortgrenzen mehrdeutig. Die Entropie zählt
+nur die tatsächlich verwendbaren Wörter.
+
 ### `check_password(password, *, online=False)`
 
 Selbst gewähltes Passwort prüfen.
