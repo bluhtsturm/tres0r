@@ -1,6 +1,6 @@
 {
  "tres0r": {
-  "AppendResult": "dataclass(path: Path; segment: int; entries: int; size: int; added: int; skipped: list[tuple[str, str]] = <factory>; excluded: int = 0; issues: list[portability.Issue] = <factory>)",
+  "AppendResult": "dataclass(path: Path; segment: int; entries: int; size: int; added: int; skipped: list[str] = <factory>; excluded: int = 0; issues: list[portability.Issue] = <factory>)",
   "CancelToken": "class(self) -> 'None' | cancel(self) -> 'None'; cancelled (property); check(self) -> 'None'",
   "Cancelled": "exception(Tres0rError)",
   "ContainerInfo": "dataclass(path: Path; kdf: KdfParams | None; level: str | None; size: int; version: int = 1; header_len: int = 107; payload_type: str = 'tar'; compression: str | None = None; has_index: bool = False; slots: list[SlotInfo] = <factory>; signed: bool = False; volumes: int = 1; segmented: bool = False; interrupted: bool = False) | payload_size (property)",

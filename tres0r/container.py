@@ -313,7 +313,9 @@ def plan_sources(sources: Sequence[str | os.PathLike[str]]) -> list[tuple[Path, 
         path = Path(raw)
         if not os.path.lexists(path):
             raise Tres0rError(f"Nicht gefunden: {path}")
-        name = path.name or Path(os.path.realpath(path)).name
+        name = path.name
+        if name in ("", ".", ".."):  # "." bzw. "ordner/..": Name des tatsächlichen Ordners –
+            name = Path(os.path.realpath(path)).name  # ".." als Name wäre beim Entpacken unzulässig
         if not name:
             raise Tres0rError(f"Kann für {path} keinen Namen im Container bestimmen.")
         if name in seen:
@@ -2187,7 +2189,7 @@ class AppendResult:
     entries: int
     size: int  # neue Gesamtgröße
     added: int  # Bytes, die hinzugekommen sind
-    skipped: list[tuple[str, str]] = field(default_factory=list)
+    skipped: list[str] = field(default_factory=list)  # FIFOs, Sockets, Geräte (wie Plan.skipped)
     excluded: int = 0
     issues: list[portability.Issue] = field(default_factory=list)
 

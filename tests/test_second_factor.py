@@ -178,6 +178,22 @@ def test_cli_keyfile_workflow(tmp_path, sample_tree, capsys):
     assert code == 0
 
 
+def test_cli_pack_verify_with_second_factor_and_shares(tmp_path, sample_tree, capsys):
+    """Fund: 'pack --keyfile … --verify' schrieb den Container, meldete dann aber
+    "Fehler" mit Exit-Code 2 – die Prüfung bekam das Keyfile nicht. Mit
+    --no-password --shares wurde die Prüfung übersprungen, obwohl Anteile vorlagen."""
+    pw = tmp_path / "pw"
+    pw.write_text(PASSWORD + "\n")
+    kf = tmp_path / "zweiter.key"
+    keys.generate_keyfile(kf)
+    code, data = run_json(capsys, ["pack", str(sample_tree[1]), "-o", str(tmp_path / "k.tres0r"),
+                                   "--password-file", str(pw), "--offline", "--keyfile", str(kf), "--verify"])
+    assert code == 0 and data["verified"] is True
+    code, data = run_json(capsys, ["pack", str(sample_tree[1]), "-o", str(tmp_path / "s.tres0r"),
+                                   "--no-password", "--shares", "2/3", "--verify"])
+    assert code == 0 and data["verified"] is True and not data.get("warnings")
+
+
 def test_cli_shares_workflow(tmp_path, sample_tree, capsys):
     pw = tmp_path / "pw"
     pw.write_text(PASSWORD + "\n")

@@ -24,6 +24,33 @@
   CRLF, `was?.txt` ist unter Windows nicht anlegbar, keine Unix-Rechte, der
   WSL-Platzhalter `bash.exe` und ein Textual-Zeitproblem (Knopf noch nicht eingehängt).
 
+### Behoben (Code-Durchsicht)
+
+* **`tres0r pack ..`** (oder `ordner/..`) legte alles unter dem Namen `..` ab – der
+  Container ließ sich danach **nicht mehr entpacken** (`UnsafeArchive`). Quellen
+  `.`, `..` und `…/..` bekommen jetzt den Namen des tatsächlichen Ordners.
+* **Container mit Ziffern-Endung** wie `Steuer.2024` galten als Teil 2024 eines
+  aufgeteilten Satzes: `pack` schrieb die Datei und meldete dann „Teil 1 fehlt“, kein
+  Befehl konnte sie öffnen. Ein späterer Teil beginnt nie mit der Container-Kennung –
+  daran werden eigenständige Container jetzt erkannt.
+* **TUI/GUI „Auswahl entpacken“** übergab Namen als fnmatch-Muster: Bei
+  `Urlaub [2019].jpg` wurde stillschweigend `Urlaub 2.jpg` entpackt, `*` im Namen
+  nahm fremde Einträge mit. `*`, `?` und `[` werden jetzt wörtlich genommen.
+* **Passwortdateien mit Byte-Order-Mark** (Windows-Editor, PowerShell `Out-File
+  -Encoding utf8`): Das BOM wurde Teil des Passworts – den Container öffnete danach
+  nur genau diese Datei, nie das eingetippte Passwort. Es wird jetzt entfernt; beim
+  Entsperren wird die alte Form mitprobiert, damit so angelegte Container und
+  Schlüsseldateien lesbar bleiben.
+* **`pack --verify`** mit `--keyfile` bzw. `--fido2` meldete „Fehler“ (Exit-Code 2),
+  obwohl der Container korrekt war – die Prüfung bekam den zweiten Faktor nicht. Mit
+  `--no-password --shares` wurde sie übersprungen; jetzt prüft sie mit den Anteilen.
+* **`append`** brach ab („too many values to unpack“), sobald im angehängten Ordner
+  eine FIFO/Socket/Gerätedatei lag. Die Typangabe `AppendResult.skipped` lautet jetzt
+  wie der gelieferte Wert `list[str]` (API-Schnappschuss bewusst aktualisiert).
+* `genpass -c 0` endete mit einem Traceback; jetzt eine normale Meldung.
+* TUI: Der Titel der Schlüsselansicht zeigte bei Namen mit `[` einen Backslash
+  (Titel sind in Textual reiner Text, kein Markup).
+
 ## 1.0.0rc7 – bereit für GitHub
 
 Keine Änderung am Programmverhalten.

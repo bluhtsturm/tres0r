@@ -233,14 +233,30 @@ class Ui:
 # ---------------------------------------------------------------------------
 # Zugangsdaten
 # ---------------------------------------------------------------------------
-def _read_password_file(spec: str) -> str:
-    """Erste Zeile aus Datei lesen; '-' liest eine Zeile von stdin."""
+_BOM = "\ufeff"
+
+
+def _password_candidates(spec: str) -> list[str]:
+    """Erste Zeile aus Datei lesen ('-' liest eine Zeile von stdin): [Passwort] bzw.
+    [Passwort, Passwort mit BOM], wenn die Datei mit einem Byte-Order-Mark beginnt.
+
+    Das BOM (Windows-Editor, PowerShell 'Out-File -Encoding utf8') gehört nicht zum
+    Passwort – sonst öffnete nur genau diese Datei den Container, nie das eingetippte
+    Passwort. Die zweite Form dient nur dem Entsperren von Containern und
+    Schlüsseldateien, die frühere Versionen damit angelegt haben.
+    """
     text = sys.stdin.readline() if spec == "-" else Path(spec).read_text(encoding="utf-8")
     lines = text.splitlines()
-    password = lines[0] if lines else ""
+    line = lines[0] if lines else ""
+    password = line.removeprefix(_BOM)
     if not password:
         raise Tres0rError("Passwortdatei ist leer.")
-    return password
+    return [password, line] if line != password else [password]
+
+
+def _read_password_file(spec: str) -> str:
+    """Passwort aus Datei bzw. stdin ('-'), ohne Byte-Order-Mark."""
+    return _password_candidates(spec)[0]
 
 
 def _existing_password(path_or_none: str | None, prompt: str = "Passwort: ") -> str:
@@ -265,17 +281,24 @@ def _level_text(args: argparse.Namespace, params) -> str:
     return f"Stufe {args.level} ({params.describe()})"
 
 
-def _key_passphrase(args: argparse.Namespace, path: str):
-    """Passphrase für eine geschützte Schlüsseldatei: aus --key-passphrase-file oder Rückfrage."""
-    if getattr(args, "key_passphrase_file", None):
-        return _read_password_file(args.key_passphrase_file)
-    return lambda: getpass.getpass(f"Passphrase für {path}: ")
+def _load_keys(load, args: argparse.Namespace, path: str):
+    """Schlüsseldatei mit ``load`` (z. B. keys.load_identities) laden; die Passphrase einer
+    geschützten Datei kommt aus --key-passphrase-file oder aus einer Rückfrage."""
+    if not getattr(args, "key_passphrase_file", None):
+        return load(path, lambda: getpass.getpass(f"Passphrase für {path}: "))
+    *earlier, last = _password_candidates(args.key_passphrase_file)
+    for candidate in earlier:  # nur bei BOM: zuerst ohne, dann wie frühere Versionen mit
+        try:
+            return load(path, candidate)
+        except WrongPassword:
+            pass
+    return load(path, last)
 
 
 def _credentials(args: argparse.Namespace, info: container.ContainerInfo | None = None) -> keys.Credentials:
     """Entsperr-Daten aus --password-file / -i; Passwort sonst erst bei Bedarf abfragen."""
     identities = [k for path in (args.identity or [])
-                  for k in keys.load_identities(path, _key_passphrase(args, path))]
+                  for k in _load_keys(keys.load_identities, args, path)]
     keyfiles = [keys.keyfile_secret(path) for path in (getattr(args, "keyfile", None) or [])]
     shares = [shamir.parse_share(text) for text in (getattr(args, "share", None) or [])]
     for path in getattr(args, "shares_file", None) or []:
@@ -283,7 +306,7 @@ def _credentials(args: argparse.Namespace, info: container.ContainerInfo | None 
                    if line.strip() and not line.strip().startswith("#")]
     fido2 = _fido2_provider() if getattr(args, "fido2", False) else None
     if args.password_file:
-        return keys.Credentials(passwords=[_read_password_file(args.password_file)], identities=identities,
+        return keys.Credentials(passwords=_password_candidates(args.password_file), identities=identities,
                                 keyfiles=keyfiles, shares=shares, fido2=fido2)
     has_recovery = info is not None and any(s.type == "wiederherstellung" for s in info.slots)
     prompt = "Passwort oder Wiederherstellungsphrase: " if has_recovery else "Passwort: "
@@ -511,14 +534,14 @@ def _deliver_shares(ui: Ui, shares: list, directory: str | None, yes: bool) -> N
 def _recipients(args: argparse.Namespace) -> list:
     found = [keys.parse_recipient(text) for text in (args.recipient or [])]
     for path in args.recipients_file or []:
-        found.extend(keys.load_recipients(path, _key_passphrase(args, path)))
+        found.extend(_load_keys(keys.load_recipients, args, path))
     return found
 
 
 def _signing_key(args: argparse.Namespace):
     if not getattr(args, "sign", None):
         return None
-    found = keys.load_signing_keys(args.sign, _key_passphrase(args, args.sign))
+    found = _load_keys(keys.load_signing_keys, args, args.sign)
     if len(found) > 1:
         raise Tres0rError(f"{args.sign} enthält mehrere Signaturschlüssel – bitte eine Datei mit genau einem.")
     return found[0]
@@ -527,7 +550,7 @@ def _signing_key(args: argparse.Namespace):
 def _signers(args: argparse.Namespace) -> list:
     found = [keys.parse_verify_key(text) for text in (args.signer or [])]
     for path in args.signers_file or []:
-        found.extend(keys.load_verify_keys(path, _key_passphrase(args, path)))
+        found.extend(_load_keys(keys.load_verify_keys, args, path))
     return found
 
 
@@ -648,8 +671,12 @@ def cmd_pack(args: argparse.Namespace, ui: Ui) -> int:
 
     if args.verify:
         ui.status("Prüfe den geschriebenen Container ...")
-        creds = keys.Credentials(passwords=[p for p in (setup["password"], setup["recovery"]) if p])
-        if not creds.passwords:
+        # mit allem, was gerade gesetzt wurde – auch dem zweiten Faktor (der FIDO2-Anbieter
+        # hat das Geheimnis aus der Registrierung zwischengespeichert: keine weitere Berührung)
+        creds = keys.Credentials(passwords=[p for p in (setup["password"], setup["recovery"]) if p],
+                                 keyfiles=[setup["keyfile"]] if setup["keyfile"] is not None else [],
+                                 shares=list(result.shares), fido2=setup["fido2"])
+        if not creds.passwords and not creds.shares:
             ui.warn("--verify übersprungen: ohne Passwort lässt sich nur mit einer Identität prüfen.")
         else:
             try:
@@ -829,8 +856,8 @@ def cmd_append(args: argparse.Namespace, ui: Ui) -> int:
         raise Tres0rError("Anhängen an aufgeteilte Container wird nicht unterstützt.")
     plan = container.scan(args.files, exclude=_exclude_rules(args), ignore_files=not args.no_ignore_file,
                           output=args.container)
-    for path, reason in plan.skipped:
-        ui.warn(f"übersprungen: {path} ({reason})")
+    for skipped in plan.skipped:
+        ui.warn(f"Übersprungen (FIFO/Socket/Gerätedatei): {skipped}")
     _unlock_status(ui, info, args)
     try:
         result = container.append(args.container, plan, creds, compress=args.compress, sign_with=signing_key,
@@ -1030,7 +1057,7 @@ def cmd_keygen(args: argparse.Namespace, ui: Ui) -> int:
 
 
 def cmd_pubkey(args: argparse.Namespace, ui: Ui) -> int:
-    found = keys.load_key_file(args.identity_file, _key_passphrase(args, args.identity_file))
+    found = _load_keys(keys.load_key_file, args, args.identity_file)
     publics = [keys.public_text(k) for k in found.identities + found.signing_keys]
     for public in publics:
         ui.out(public)
@@ -1274,6 +1301,13 @@ def cmd_bench(args: argparse.Namespace, ui: Ui) -> int:
 # ---------------------------------------------------------------------------
 # Parser
 # ---------------------------------------------------------------------------
+def _positive_int(text: str) -> int:
+    value = int(text)
+    if value < 1:
+        raise argparse.ArgumentTypeError("mindestens 1")
+    return value
+
+
 def _common_options() -> argparse.ArgumentParser:
     parent = argparse.ArgumentParser(add_help=False)
     parent.add_argument("--json", action="store_true", help="Ergebnis als JSON auf stdout")
@@ -1617,7 +1651,7 @@ def build_parser() -> argparse.ArgumentParser:
     # -- Passwörter ---------------------------------------------------------
     p = sub.add_parser("genpass", parents=[common, gen], help="Passwort/Passphrase generieren (pwgen)")
     p.add_argument("kind", nargs="?", choices=KINDS, default="passphrase")
-    p.add_argument("-c", "--count", type=int, default=1, help="Anzahl (Standard %(default)s)")
+    p.add_argument("-c", "--count", type=_positive_int, default=1, help="Anzahl (Standard %(default)s)")
     p.set_defaults(func=cmd_genpass)
 
     p = sub.add_parser("checkpass", parents=[common], help="Passwort prüfen (Länge, Zeichenarten, HIBP)")
