@@ -94,12 +94,17 @@ tres0r gui ~/Backups          # Startordner optional
 
 Dateibaum mit Details (bei Containern schon vor dem Entsperren), Werkzeugleiste mit
 Packen (Strg+P), Öffnen (Strg+O, auch Doppelklick), Prüfen (Strg+T), Anhängen
-(Strg+A), Vergleichen (Strg+D) und Schlüssel (Strg+K). Ordner ins Fenster ziehen
-öffnet den Packdialog, ein gezogener Container wird geöffnet. Der Inhalt eines
-Containers erscheint in einem eigenen Fenster mit Größe, Datum und Segment, Suche
-(Textteil oder `*.jpg`) und Mehrfachauswahl zum Entpacken. Die Schlüsselverwaltung
-kann dasselbe wie in der TUI; neue Phrasen und Anteile erscheinen einmal vollständig
-(Anteile in Vierergruppen) und lassen sich als Dateien (0600) speichern. Die
+(Strg+A, ein Ordner oder einzelne Dateien), Vergleichen (Strg+D, vorgeschlagen wird
+der gleichnamige Ordner) und Schlüssel (Strg+K). Ordner ins Fenster ziehen
+öffnet den Packdialog, ein gezogener Container wird geöffnet. Rohdaten-Container
+(`tres0r encrypt`) enthalten keine Dateien – für sie gibt es Prüfen und Schlüssel.
+Der Inhalt eines Containers erscheint in einem eigenen Fenster mit Größe, Datum und
+(bei angehängten Segmenten) Segment, Suche (Textteil oder `*.jpg`) und
+Mehrfachauswahl zum Entpacken. Die Schlüsselverwaltung kann dasselbe wie in der TUI;
+ein neues Passwort bekommt die Stufe des vorhandenen. Neue Phrasen und Anteile
+erscheinen einmal vollständig (Phrasen mit Leerzeichen zwischen den Wörtern, Anteile
+in Vierergruppen – so abgetippt gelten beide) und lassen sich als Dateien (0600)
+speichern. Die
 vorgeschlagene Passphrase steht in einem einzeiligen Feld – ein Zeilenumbruch nach
 einem Bindestrich wäre beim Abschreiben mehrdeutig. Namen und Fehlermeldungen werden
 stets als reiner Text gezeigt (nie als HTML). Qt-eigene Texte folgen der
