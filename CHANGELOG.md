@@ -55,6 +55,9 @@
   (Titel sind in Textual reiner Text, kein Markup).
 * Manpage: Die Beschreibung versprach `-q` und `-v` für alle Befehle – die gibt es
   nicht. Ein Test prüft jetzt jede dort genannte Option gegen den Parser.
+* Paketbau: setuptools warnte, den Wortlisten-Ordner (ohne `__init__.py`) künftig zu
+  ignorieren – dann fehlten die Wortlisten im installierten Paket. Er ist jetzt
+  ausdrücklich als Paket genannt; Wheel und Quellpaket enthalten sie wie bisher.
 
 ### Neu
 

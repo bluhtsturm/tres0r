@@ -482,3 +482,11 @@ def test_append_diff_and_search(project, tmp_path):
         await pilot.pause()
         assert app.screen.sub_title.endswith("Einträge") and isinstance(app.screen, tui.BrowseScreen)
     run(scenario, tmp_path)
+
+
+def test_error_texts_are_readable():
+    """OSError ist erwartbar (Rechte, voller Datenträger): Meldung mit Pfad statt
+    "Unerwarteter Fehler: PermissionError(13, …)" – wie in der GUI."""
+    assert tui._describe_error(PermissionError(13, "Keine Berechtigung", "/ziel")) == "Keine Berechtigung: /ziel"
+    assert tui._describe_error(OSError("kaputt")) == "kaputt"
+    assert tui._describe_error(ValueError("x")).startswith("Unerwarteter Fehler")

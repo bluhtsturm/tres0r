@@ -60,10 +60,12 @@ fido2 = ["fido2>=2.0"]
 tres0r = "tres0r.cli:main"
 
 [tool.setuptools]
-packages = ["tres0r"]
+# wordlists ist ein Datenordner ohne __init__.py – ausdrücklich nennen, sonst warnt setuptools,
+# ihn künftig zu ignorieren (die Wortlisten fehlten dann im installierten Paket)
+packages = ["tres0r", "tres0r.wordlists"]
 
 [tool.setuptools.package-data]
-tres0r = ["wordlists/*.txt", "wordlists/*.md"]
+"tres0r.wordlists" = ["*.txt", "*.md"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
