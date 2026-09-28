@@ -9,7 +9,7 @@ was getestet ist, was nicht, und Funde offen benennen.
 Verschlüsselte Container für Dateien/Ordner/Datenströme: Argon2id + ChaCha20-Poly1305
 (STREAM, 64-KiB-Chunks), bis zu 16 Keyslots, Ed25519-Signaturen, tar mit
 Inhaltsverzeichnis, optional zstd. CLI, TUI (Textual), GUI (PySide6). Stand:
-1.1.0 (`pyproject.toml`), Lizenz MIT. Paketname auf PyPI: `tres0r-crypt` (`tres0r`
+1.2.0 (`pyproject.toml`), Lizenz MIT. Paketname auf PyPI: `tres0r-crypt` (`tres0r`
 lehnt PyPI als zu ähnlich zu `tresor` ab) – Import und Befehl bleiben `tres0r`.
 
 ## Aufbau
@@ -113,7 +113,7 @@ mit eigenem Index, Prüfung auf hängende Threads nach jedem Test),
   (seine Befunde → 1.1.0) und 1.0.1 von PyPI unter Windows Server 2025, beides lief.
   Nicht gezielt geprüft: X11/Wayland, Themes, HiDPI, Drag & Drop, Dateidialoge.
   Aus 1.1.0 hat Julian die Datenleck-Warnung, „Passwort vorschlagen“ und den Abbruch
-  mit Esc von Hand bestätigt. Die Längenwahl der Vorschläge (danach) ist bisher nur
+  mit Esc von Hand bestätigt. Die Längenwahl der Vorschläge (1.2.0) ist bisher nur
   automatisch getestet.
 * FIDO2 mit echter Hardware (YubiKey o. Ä.) inkl. PIN.
 * Gewinn des Hintergrund-Dekodierers auf Mehrkern-Rechnern messen (`verify (zstd)`).

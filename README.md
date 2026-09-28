@@ -20,10 +20,12 @@ Container und eingebautem Passphrasen-Generator (pwgen) samt Have-I-Been-Pwned-P
   unabhängigem Referenz-Leser und Testvektoren
 * **Abhängigkeiten:** nur `cryptography`; alles Weitere als optionale Extras
 
-> **Status: 1.1.0.** Getestet unter Linux mit Python 3.10–3.14 (automatische Tests,
+> **Status: 1.2.0.** Getestet unter Linux mit Python 3.10–3.14 (automatische Tests,
 > Fuzzing, Property-Tests). Unter Windows und macOS laufen die automatischen Tests
 > (ohne GUI und FUSE) in der CI ebenfalls durch. Die GUI von Version 1.0 lief im
-> Handtest unter Debian 13 und unter Windows Server 2025 (von PyPI installiert). FIDO2
+> Handtest unter Debian 13 und unter Windows Server 2025 (von PyPI installiert); die
+> Neuerungen aus 1.1.0 (Datenleck-Warnung, Passwort-Vorschlag, Abbruch) sind von Hand
+> bestätigt, die Längenwahl aus 1.2.0 bisher nur automatisch getestet. FIDO2
 > ist nur gegen einen Software-Token getestet, noch nicht mit echter Hardware. Eine
 > unabhängige Sicherheitsprüfung (Audit) gab es bisher nicht – siehe
 > [`SECURITY.md`](SECURITY.md).
