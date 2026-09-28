@@ -9,7 +9,7 @@ was getestet ist, was nicht, und Funde offen benennen.
 Verschlüsselte Container für Dateien/Ordner/Datenströme: Argon2id + ChaCha20-Poly1305
 (STREAM, 64-KiB-Chunks), bis zu 16 Keyslots, Ed25519-Signaturen, tar mit
 Inhaltsverzeichnis, optional zstd. CLI, TUI (Textual), GUI (PySide6). Stand:
-Release-Kandidat 1.0 (`pyproject.toml`), Lizenz MIT.
+1.0.0 (`pyproject.toml`), Lizenz MIT.
 
 ## Aufbau
 
@@ -92,10 +92,10 @@ mit eigenem Index, Prüfung auf hängende Threads nach jedem Test),
 
 ## Offen
 
-* CI-Erprobung unter Windows und macOS auswerten und Befunde beheben.
+* Windows/macOS: Tests in der CI grün, Jobs aber noch `continue-on-error` – bei Bedarf
+  verpflichtend machen; GUI und FUSE dort ungetestet.
 * GUI auf einem echten Desktop (X11/Wayland, Themes, HiDPI, Drag & Drop, Dateidialoge).
 * FIDO2 mit echter Hardware (YubiKey o. Ä.) inkl. PIN.
 * Gewinn des Hintergrund-Dekodierers auf Mehrkern-Rechnern messen (`verify (zstd)`).
-* PyPI: Trusted Publisher einrichten, dann `v1.0.0` taggen.
 * Später: Post-Quanten-Empfänger (Slot-Typ 4, reserviert), paralleles Dekomprimieren
   mehrerer Frames, externes Audit.
