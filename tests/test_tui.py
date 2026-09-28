@@ -412,6 +412,36 @@ def test_key_management(project, tmp_path):
         assert oct(os.stat(saved / "geheimnis-1.txt").st_mode & 0o777) == "0o600"
 
 
+def test_keys_for_raw_container_keep_level(tmp_path):
+    """Fund: "k" entsperrte über list_contents – Rohdaten-Container (encrypt, geschützte
+    Identitätsdateien) wurden abgelehnt; "+Passwort" nahm pauschal Stufe "normal"."""
+    import io
+
+    from tres0r.kdf import KdfParams
+
+    strong = KdfParams(memory_kib=16 * 1024, iterations=2, lanes=1)
+    raw = tmp_path / "roh.tres0r"
+    with container.atomic_output(raw) as out:
+        container.encrypt_stream(io.BytesIO(b"daten"), out, PASSWORD, strong)
+
+    async def scenario(app, pilot):
+        app.select(raw)
+        await pilot.press("k")
+        await unlock(app, pilot)
+        assert "Slot 0" in await finish_progress(app, pilot)
+        await until(pilot, lambda: isinstance(app.screen, tui.KeysScreen))
+        await pilot.press("n")
+        await until(pilot, lambda: isinstance(app.screen, tui.NewPasswordScreen))
+        for field in ("#password", "#confirm"):
+            app.screen.query_one(field, Input).value = "zweites-passwort"
+        await click(app, pilot, "#ok")
+        assert "Slot 1" in await finish_progress(app, pilot)
+    run(scenario, tmp_path)
+    slots = container.inspect(raw).slots
+    assert len(slots) == 2 and slots[1].description == slots[0].description
+    container.check_credentials(raw, "zweites-passwort")
+
+
 def test_append_diff_and_search(project, tmp_path):
     out = container.create([project], tmp_path / "Projekt.tres0r", PASSWORD, FAST).path
     extra = tmp_path / "nachtrag.txt"

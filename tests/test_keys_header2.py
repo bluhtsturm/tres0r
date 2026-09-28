@@ -234,3 +234,36 @@ def test_only_canonical_encoding_is_accepted():
                     continue
                 with pytest.raises(keys.KeyFormatError):
                     parse(text[:-1] + replacement)
+
+
+# --- Zugangsdaten prüfen, ohne Inhalt zu lesen ------------------------------------
+def test_check_credentials_for_all_container_kinds(tmp_path, sample_tree):
+    """Für die Schlüsselverwaltung in TUI/GUI: vorher list_contents – das lehnte
+    Rohdaten-Container (encrypt, geschützte Identitätsdateien) grundsätzlich ab."""
+    from tres0r import container
+    from tres0r.progress import Monitor
+
+    from conftest import make_tar, write_raw_container
+
+    phrase = keys.generate_recovery().value
+    tar = container.create(sample_tree, tmp_path / "t.tres0r", PASSWORD, FAST, recovery=phrase).path
+    assert container.check_credentials(tar, PASSWORD).type == "passwort"
+    slot = container.check_credentials(tar, phrase.replace("-", " ").upper())
+    assert (slot.index, slot.type) == (1, "wiederherstellung")
+    with pytest.raises(WrongPassword):
+        container.check_credentials(tar, "falsch")
+
+    raw = tmp_path / "r.tres0r"
+    with container.atomic_output(raw) as out:
+        container.encrypt_stream(io.BytesIO(b"daten"), out, PASSWORD, FAST)
+    events = []
+    assert container.check_credentials(raw, PASSWORD, progress=Monitor(events.append)).index == 0
+    assert {e.phase for e in events} == {"schlüssel"}
+
+    ident = tmp_path / "ident.key"
+    keys.write_identity_file(ident, keys.generate_identity(), PASSWORD, FAST)  # auch ein Rohdaten-Container
+    assert container.check_credentials(ident, PASSWORD).type == "passwort"
+
+    old = tmp_path / "v1.tres0r"
+    write_raw_container(old, make_tar([]))
+    assert container.check_credentials(old, PASSWORD).description == "Passwort"

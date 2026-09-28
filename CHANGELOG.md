@@ -53,6 +53,46 @@
 * `genpass -c 0` endete mit einem Traceback; jetzt eine normale Meldung.
 * TUI: Der Titel der Schlüsselansicht zeigte bei Namen mit `[` einen Backslash
   (Titel sind in Textual reiner Text, kein Markup).
+* Manpage: Die Beschreibung versprach `-q` und `-v` für alle Befehle – die gibt es
+  nicht. Ein Test prüft jetzt jede dort genannte Option gegen den Parser.
+
+### Neu
+
+* **`check_credentials(container, credentials)`** (öffentliche API, additiv): prüft
+  Zugangsdaten, ohne Inhalt zu lesen – nur Header und MAC, für alle Container.
+
+### Grafische Oberfläche (durchgesehen, Bildschirmfotos ohne Bildschirm)
+
+* **Behoben:** Der Passphrase-Vorschlag war trotz Gegenmaßnahme **rechts
+  abgeschnitten** (gemessen: 48 px, das Ende der Phrase fehlte) und der Hinweis
+  darüber zu niedrig. Das Feld selbst war breit genug, ragte aber über den Dialogrand;
+  der Test maß nur die Feldbreite. Jetzt wächst der Dialog auf seine Wunschgröße, und
+  der Test prüft, dass das Feld ganz im Dialog liegt.
+* **Behoben:** „Schlüssel …“ scheiterte bei Rohdaten-Containern (`tres0r encrypt`,
+  geschützte Identitätsdateien) – entsperrt wurde über das Inhaltsverzeichnis. Jetzt
+  über `check_credentials` (TUI ebenso); bei v1-Containern entfällt dabei auch das
+  komplette Durchlesen.
+* **Behoben:** „+ Passwort“ legte pauschal Stufe „normal“ an – auch in Containern mit
+  Stufe „stark“; der schwächste Slot bestimmt aber den Schutz. Jetzt gilt die Stufe
+  des vorhandenen Passworts (TUI ebenso).
+* **Behoben:** Die Wiederherstellungsphrase brach nach einem `-` um (Projektregel);
+  sie steht jetzt mit Leerzeichen zwischen den Wörtern da – so abgetippt gilt sie
+  ebenso.
+* Fehler wie fehlende Schreibrechte erscheinen als „Keine Berechtigung: /pfad“ statt
+  „Unerwarteter Fehler: PermissionError(13, …)“ (TUI ebenso).
+* Packdialog: leere Zieldatei, Ordner als Ziel oder fehlender Zielordner werden
+  gemeldet, bevor die Schlüsselableitung startet. Nach eigenem Passwort verschwindet
+  ein vorheriger Vorschlag (er stand sonst als „bitte notieren“ weiter da).
+* Anhängen geht auch mit einzelnen Dateien (der Hinweis „Dateien in das Fenster
+  ziehen“ packte in Wahrheit einen neuen Container); „Vergleichen“ schlägt wie die
+  TUI den gleichnamigen Ordner vor.
+* Rohdaten-Container: Details nennen den Inhalt, „Öffnen“/„Anhängen“/„Vergleichen“
+  sind gesperrt, Doppelklick und Ziehen führen nicht mehr in eine Fehlermeldung.
+* Geheimnisse speichern bestätigt, wohin; der Fortschrittsbalken zeigt bei Phasen ohne
+  bekannte Größe wieder „beschäftigt“; Inhaltsfenster mit vollständigen Datums- und
+  Größenspalten, Tooltip für lange Namen, Segment-Spalte nur bei Segmenten;
+  Schlüssel- und Vergleichstabelle ohne doppelte Nummerierung und ohne interne
+  Typbezeichner.
 
 ## 1.0.0rc7 – bereit für GitHub
 

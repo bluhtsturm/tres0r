@@ -36,6 +36,7 @@ from .container import (
     append,
     atomic_output,
     change_password,
+    check_credentials,
     check_free_space,
     create,
     decrypt_stream,
@@ -84,7 +85,7 @@ __all__ = [
     "create", "append", "inspect", "list_contents", "verify", "extract", "extract_stream", "diff",
     "encrypt_stream", "decrypt_stream", "salvage", "repair", "upgrade",
     # Schlüsselverwaltung
-    "add_keys", "add_threshold", "remove_key", "change_password",
+    "add_keys", "add_threshold", "remove_key", "change_password", "check_credentials",
     # Ergebnisse
     "Plan", "ContainerInfo", "SlotInfo", "CreateResult", "AppendResult", "Entry", "VerifyResult",
     "ExtractResult", "EncryptResult", "DecryptResult", "DiffEntry", "DiffResult", "SalvageResult",

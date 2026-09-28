@@ -44,6 +44,17 @@ def _exact(name: str) -> str:
     return "".join(f"[{ch}]" if ch in "*?[" else ch for ch in name)
 
 
+def describe_error(error: BaseException) -> str:
+    """Meldetext für einen Fehler aus einer Aufgabe. ``OSError`` ist erwartbar (fehlende
+    Rechte, voller Datenträger) – mit Pfad statt "Unerwarteter Fehler: PermissionError(…)"."""
+    if isinstance(error, Tres0rError):
+        return str(error)
+    if isinstance(error, OSError):
+        where = f": {error.filename}" if error.filename else ""
+        return f"{error.strerror or error}{where}"
+    return f"Unerwarteter Fehler: {error!r}"
+
+
 def _plain(label: QLabel) -> QLabel:
     """Reiner Text, umbrechend, markierbar – nie HTML."""
     label.setTextFormat(Qt.PlainText)
@@ -117,6 +128,8 @@ class ProgressDialog(QDialog):
         if event.total:
             self.bar.setRange(0, 1000)
             self.bar.setValue(int(1000 * min(1.0, event.done / event.total)))
+        elif not event.finished:
+            self.bar.setRange(0, 0)  # Gesamtgröße unbekannt (z. B. Schlüsselableitung): "beschäftigt"
         if event.unit == UNIT_ENTRIES:
             parts.append(f"{event.done} Einträge")
         elif event.phase != "schlüssel":
@@ -181,7 +194,11 @@ class PasswordFields(QWidget):
         self.password.textChanged.connect(self._strength)
 
     def _strength(self, text: str) -> None:
-        if not text or text == getattr(self, "_suggested", None):
+        suggested = text == getattr(self, "_suggested", None)
+        if not suggested:  # eigenes Passwort: der Vorschlag gilt nicht mehr – nicht stehen lassen
+            self.suggestion.setVisible(False)
+            self.suggestion_hint.setText("")
+        if not text or suggested:
             self.strength.setText("")
             return
         check = passgen.check_password(text)
@@ -197,14 +214,16 @@ class PasswordFields(QWidget):
         self.suggestion.setText(phrase.value)
         self.suggestion.setVisible(True)
         self.suggestion.setCursorPosition(0)
-        # ganz sichtbar, ohne Scrollen – sonst übersieht man beim Abschreiben das Ende
-        needed = self.suggestion.fontMetrics().horizontalAdvance(phrase.value) + 24
-        self.suggestion.setMinimumWidth(needed)
+        # ganz sichtbar, ohne Scrollen – sonst übersieht man beim Abschreiben das Ende. Das Feld
+        # selbst wird sofort breit genug, ragte aber über den Dialogrand hinaus (gemessen: 48 px
+        # abgeschnitten, Hinweis darüber zu niedrig) – deshalb das ganze Fenster auf seine neue
+        # Wunschgröße bringen (adjustSize() vergrößert sichtbare Dialoge nicht zuverlässig).
+        self.suggestion.setMinimumWidth(self.suggestion.fontMetrics().horizontalAdvance(phrase.value) + 24)
         window = self.window()
+        self.layout().activate()  # zuerst die eigene Ebene – sonst ist die Wunschgröße des Dialogs veraltet
         window.layout().activate()
-        missing = needed - self.suggestion.width()
-        if missing > 0:  # adjustSize() vergrößert sichtbare Dialoge nicht zuverlässig
-            window.resize(window.width() + missing, window.height())
+        wanted = window.sizeHint()
+        window.resize(max(window.width(), wanted.width()), max(window.height(), wanted.height()))
 
     def value(self) -> str | None:
         """Passwort oder None (mit Hinweis im Stärkefeld), wenn leer oder abweichend."""
@@ -266,8 +285,15 @@ class PackDialog(QDialog):
     def _accept(self) -> None:
         if self.passwords.value() is None:
             return
-        if container.volumes.exists(Path(self.output.text()).expanduser()):
-            self.passwords.strength.setText(f"{self.output.text()} existiert bereits.")
+        text = self.output.text().strip()
+        output = Path(text).expanduser()
+        parent = output.parent if str(output.parent) else Path(".")
+        problem = ("Bitte eine Zieldatei angeben." if not text
+                   else f"{text} ist ein Ordner – bitte einen Dateinamen angeben." if output.is_dir()
+                   else f"Zielordner {parent} existiert nicht." if not parent.is_dir()
+                   else f"{text} existiert bereits." if container.volumes.exists(output) else None)
+        if problem:
+            self.passwords.strength.setText(problem)
             return
         self.accept()
 
@@ -342,18 +368,23 @@ class SecretsDialog(QDialog):
         self.text.setFont(QFont("monospace"))
         self.text.setPlainText("\n\n".join(f"{label}:\n{self.readable(value)}" for label, value in items))
         layout.addWidget(self.text)
+        self.saved_note = _plain(QLabel(""))
+        layout.addWidget(self.saved_note)
         buttons = QDialogButtonBox()
         save = buttons.addButton("Als Dateien speichern …", QDialogButtonBox.ActionRole)
-        save.clicked.connect(self.save)
+        save.clicked.connect(lambda: self.save())  # clicked liefert sonst "checked" als Ordner
         done = buttons.addButton("Notiert – schließen", QDialogButtonBox.AcceptRole)
         done.clicked.connect(self.accept)
         layout.addWidget(buttons)
 
     @staticmethod
     def readable(value: str) -> str:
-        """Anteile in Vierergruppen (so abgetippt passen sie wieder), Phrasen unverändert."""
+        """Anteile in Vierergruppen, Wiederherstellungsphrasen mit Leerzeichen zwischen den
+        Wörtern – so wird nur zwischen Wörtern umbrochen, nie nach einem "-" (mehrdeutig beim
+        Abschreiben). Beides gilt so abgetippt wieder: Anteile ignorieren Leerzeichen,
+        Phrasen werden kanonisiert (keys.canonical_secret)."""
         if not value.startswith("tres0r-teil-"):
-            return value
+            return value.replace("-", " ")
         body = value[len("tres0r-teil-"):]
         return "tres0r-teil-" + " ".join(body[i:i + 4] for i in range(0, len(body), 4))
 
@@ -371,6 +402,9 @@ class SecretsDialog(QDialog):
             box.setTextFormat(Qt.PlainText)
             box.exec()
             return None
+        rights = " (Rechte 0600)" if os.name == "posix" else ""  # Windows kennt keine Unix-Rechte
+        self.saved_note.setText(f"{len(self.items)} Datei(en) in {folder} gespeichert{rights} – "
+                                "einzeln weitergeben bzw. sicher verwahren, danach dort löschen.")
         return folder
 
 
@@ -393,6 +427,8 @@ class BrowseWindow(QWidget):
         self.tree.setHeaderLabels(["Name", "Größe", "Geändert", "Segment"])
         self.tree.setSelectionMode(QAbstractItemView.ExtendedSelection)
         self.tree.header().setSectionResizeMode(0, QHeaderView.Stretch)
+        for column in (1, 2, 3):  # Datum und Größe nie abschneiden
+            self.tree.header().setSectionResizeMode(column, QHeaderView.ResizeToContents)
         layout.addWidget(self.tree)
         row = QHBoxLayout()
         for text, slot in (("Auswahl entpacken …", self.extract_selected), ("Alles entpacken …", self.extract_all),
@@ -414,6 +450,8 @@ class BrowseWindow(QWidget):
                 parent = self.items.get("/".join(parts[:depth - 1]))
                 item = QTreeWidgetItem([parts[depth - 1]])  # reiner Text
                 item.setData(0, Qt.UserRole, key)
+                item.setToolTip(0, key)  # lange Namen werden in der Spalte gekürzt
+                item.setTextAlignment(1, Qt.AlignRight | Qt.AlignVCenter)
                 (parent.addChild(item) if parent else self.tree.addTopLevelItem(item))
                 self.items[key] = item
             item = self.items["/".join(parts)]
@@ -424,6 +462,7 @@ class BrowseWindow(QWidget):
             if entry.segment:
                 item.setText(3, str(entry.segment))
         self.tree.expandToDepth(0)
+        self.tree.setColumnHidden(3, not any(entry.segment for entry in self.entries))
 
     def filter(self, text: str) -> None:
         pattern = text.strip().lower()
@@ -477,11 +516,14 @@ class KeysDialog(QDialog):
         self.setWindowTitle(f"Schlüssel – {path.name}")
         self.resize(720, 360)
         layout = QVBoxLayout(self)
-        self.table = QTableWidget(0, 3)
-        self.table.setHorizontalHeaderLabels(["Nr.", "Art", "Beschreibung"])
+        self.table = QTableWidget(0, 2)
+        self.table.setHorizontalHeaderLabels(["Nr.", "Schlüssel"])  # "Art" zeigte interne Bezeichner
         self.table.setSelectionBehavior(QAbstractItemView.SelectRows)
+        self.table.setSelectionMode(QAbstractItemView.SingleSelection)
         self.table.setEditTriggers(QAbstractItemView.NoEditTriggers)
-        self.table.horizontalHeader().setSectionResizeMode(2, QHeaderView.Stretch)
+        self.table.verticalHeader().setVisible(False)  # sonst zweite Nummerierung (1, 2 …) neben "Nr."
+        self.table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeToContents)
+        self.table.horizontalHeader().setSectionResizeMode(1, QHeaderView.Stretch)
         layout.addWidget(self.table)
         row = QHBoxLayout()
         for text, slot in (("+ Passwort …", self.add_password), ("+ Phrase", self.add_recovery),
@@ -498,7 +540,7 @@ class KeysDialog(QDialog):
         self.info = container.inspect(self.path)
         self.table.setRowCount(len(self.info.slots))
         for row, slot in enumerate(self.info.slots):
-            for column, text in enumerate((str(slot.index), slot.type, slot.description)):
+            for column, text in enumerate((str(slot.index), slot.description)):
                 self.table.setItem(row, column, QTableWidgetItem(text))  # reiner Text
 
     def _run(self, title: str, job) -> object:
@@ -524,7 +566,9 @@ class KeysDialog(QDialog):
         new = self._new_password("Weiteres Passwort")
         if new is not None:
             self._run("Passwort hinzufügen", lambda m: container.add_keys(
-                self.path, self.credentials, password=new["password"], params=LEVELS["normal"],
+                self.path, self.credentials, password=new["password"],
+                # gleiche Stufe wie das vorhandene Passwort – ein schwächerer Slot senkt den Schutz
+                params=self.info.kdf or LEVELS["normal"],
                 keyfile=new["keyfile"], fido2=new["fido2"], progress=m))
 
     def add_recovery(self) -> None:
@@ -599,7 +643,11 @@ class DiffDialog(QDialog):
         self.table = QTableWidget(len(result.changes), 3)
         self.table.setHorizontalHeaderLabels(["Status", "Eintrag", "Detail"])
         self.table.setEditTriggers(QAbstractItemView.NoEditTriggers)
-        self.table.horizontalHeader().setSectionResizeMode(1, QHeaderView.Stretch)
+        self.table.verticalHeader().setVisible(False)
+        header = self.table.horizontalHeader()
+        header.setSectionResizeMode(0, QHeaderView.ResizeToContents)
+        header.setSectionResizeMode(1, QHeaderView.Stretch)
+        header.setSectionResizeMode(2, QHeaderView.ResizeToContents)
         for row, change in enumerate(result.changes):
             for column, text in enumerate((change.status, change.name, change.detail)):
                 self.table.setItem(row, column, QTableWidgetItem(text))
@@ -703,9 +751,24 @@ class MainWindow(QMainWindow):
         chosen = QFileDialog.getExistingDirectory(self, title, str(self.start))
         return Path(chosen) if chosen else None
 
-    def choose_source(self, title: str) -> Path | None:
-        chosen = QFileDialog.getExistingDirectory(self, title, str(self.start))
+    def choose_source(self, title: str, start: Path | None = None) -> Path | None:
+        chosen = QFileDialog.getExistingDirectory(self, title, str(start or self.start))
         return Path(chosen) if chosen else None
+
+    def choose_sources(self, title: str, start: Path | None = None) -> list[Path] | None:
+        """Einen Ordner oder Dateien wählen – Qt kennt keinen gemeinsamen Dialog für beides."""
+        box = QMessageBox(QMessageBox.Question, "tres0r", title, parent=self)
+        folder = box.addButton("Ordner …", QMessageBox.AcceptRole)
+        files = box.addButton("Dateien …", QMessageBox.AcceptRole)
+        box.addButton("Abbrechen", QMessageBox.RejectRole)
+        box.exec()
+        if box.clickedButton() is folder:
+            chosen = self.choose_source(title, start)
+            return [chosen] if chosen else None
+        if box.clickedButton() is files:
+            names, _ = QFileDialog.getOpenFileNames(self, title, str(start or self.start))
+            return [Path(name) for name in names] or None
+        return None
 
     def request_pin(self) -> str | None:
         pin, ok = QInputDialog.getText(self, "FIDO2-Token", "Der Token verlangt seine PIN:", QLineEdit.Password)
@@ -721,7 +784,7 @@ class MainWindow(QMainWindow):
             if isinstance(error, Cancelled):
                 self.show_info("Abgebrochen – nichts wurde verändert.")
             else:
-                self.show_error(str(error) if isinstance(error, Tres0rError) else f"Unerwarteter Fehler: {error!r}")
+                self.show_error(describe_error(error))
             return None
         return dialog.result_value
 
@@ -767,19 +830,27 @@ class MainWindow(QMainWindow):
                 lines.append(f"{info.volumes} Teile")
             if info.interrupted:
                 lines.append("Achtung: Anhängen unterbrochen – 'tres0r repair'")
+            if info.payload_type != "tar":
+                lines += ["", "Inhalt: ein Datenstrom (tres0r encrypt), keine Dateien – "
+                              "entschlüsseln mit 'tres0r decrypt'. Prüfen und Schlüssel verwalten gehen."]
             self.details.setText("\n".join(lines))
         self._update_actions()
+
+    def _has_files(self) -> bool:
+        return self.info is not None and self.info.payload_type == "tar"
 
     def _update_actions(self) -> None:
         is_container = self.info is not None
         self.actions_by_name["pack"].setEnabled(self.selected is not None and not is_container)
-        for name in ("open", "verify", "append", "diff", "keys"):
+        for name in ("verify", "keys"):
             self.actions_by_name[name].setEnabled(is_container)
+        for name in ("open", "append", "diff"):  # Rohdaten-Container enthalten keine Dateien
+            self.actions_by_name[name].setEnabled(self._has_files())
 
     def _double_clicked(self, index) -> None:
         path = Path(self.model.filePath(index))
         self.select(path)
-        if self.info is not None:
+        if self._has_files():
             self.open()
 
     # -- Drag & Drop ------------------------------------------------------------
@@ -796,9 +867,10 @@ class MainWindow(QMainWindow):
             return
         if len(paths) == 1 and paths[0].is_file():
             self.select(paths[0])
-            if self.info is not None:
+            if self._has_files():
                 self.open()
-                return
+            if self.info is not None:
+                return  # auch Rohdaten-Container nicht noch einmal einpacken
         self.pack(paths)
 
     # -- Aktionen -------------------------------------------------------------
@@ -868,13 +940,13 @@ class MainWindow(QMainWindow):
         if self.info is None:
             return
         path = self.info.path
-        source = self.choose_source("Welchen Ordner anhängen? (Dateien: in das Fenster ziehen)")
-        if source is None:
+        sources = self.choose_sources("Was soll angehängt werden?", path.parent)
+        if not sources:
             return
         credentials = self._credentials()
         if credentials is None:
             return
-        result = self.run_task("Anhängen", lambda m: container.append(path, [source], credentials, progress=m))
+        result = self.run_task("Anhängen", lambda m: container.append(path, sources, credentials, progress=m))
         if result is not None:
             self.show_info(f"Segment {result.segment} angehängt: {result.entries} Einträge, +{_size(result.added)}")
             self.select(path)
@@ -883,7 +955,10 @@ class MainWindow(QMainWindow):
         if self.info is None:
             return
         path = self.info.path
-        local = self.choose_source("Womit vergleichen? (dieselben Pfade wie beim Packen)")
+        # Vorschlag wie in der TUI: der gleichnamige Ordner neben dem Container
+        sibling = path.with_name(path.name[:-len(container.SUFFIX)]) if path.name.endswith(container.SUFFIX) else None
+        local = self.choose_source("Womit vergleichen? (dieselben Pfade wie beim Packen)",
+                                   sibling if sibling is not None and sibling.is_dir() else path.parent)
         if local is None:
             return
         credentials = self._credentials()
@@ -899,7 +974,7 @@ class MainWindow(QMainWindow):
         path, credentials = self.info.path, self._credentials()
         if credentials is None:
             return
-        if self.run_task("Entsperren", lambda m: container.list_contents(path, credentials, progress=m)) is not None:
+        if self.run_task("Entsperren", lambda m: container.check_credentials(path, credentials, progress=m)) is not None:
             self.run_dialog(KeysDialog(self, path, credentials))
             self.select(path)
 

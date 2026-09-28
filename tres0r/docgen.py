@@ -134,7 +134,8 @@ def manpage(parser: argparse.ArgumentParser | None = None) -> str:
                  "haben (Passwörter, Wiederherstellungsphrase, Empfänger, Keyfile, FIDO2-Token, "
                  "Schwellwert-Anteile), signiert, aufgeteilt, eingehängt und erweitert werden. "
                  "Das Format ist in FORMAT.md beschrieben."),
-           _roff("Alle Befehle kennen --json (maschinenlesbare Ausgabe auf stdout), -q und -v."),
+           _roff("Alle Befehle kennen --json: stdout enthält dann genau ein JSON-Objekt, "
+                 "Status- und Fortschrittsmeldungen entfallen."),
            ".SH BEFEHLE"]
     for name, sub, summary in _commands(parser):
         if _subparsers(sub):
@@ -321,7 +322,8 @@ PARAMETERS = {
     "threads": "Threads für SHA-256 und zstd; ``None`` = automatisch (Kerne, max. 8), ``1`` = aus.",
     "split": "Teilgröße in Byte für ``NAME.001 …``; ``None`` = eine Datei.",
     "rename": "Kollidierende oder hier ungültige Namen umbenennen statt abbrechen.",
-    "only": "Muster: nur passende Einträge (samt Inhalt passender Ordner).",
+    "only": "fnmatch-Muster: nur passende Einträge (samt Inhalt passender Ordner). ``[``, ``*`` und "
+            "``?`` sind Sonderzeichen – einen Namen wörtlich treffen z. B. ``[[]`` statt ``[``.",
     "total": "Erwartete Größe in Byte – für Fortschritt und Restzeit.",
     "passphrase": "Passphrase einer geschützten Schlüsseldatei.",
 }
