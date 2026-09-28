@@ -97,11 +97,12 @@ mit eigenem Index, Prüfung auf hängende Threads nach jedem Test),
 
 ## Offen
 
-* Windows/macOS: GUI und FUSE nicht systematisch getestet (die CI-Jobs dort laufen ohne
-  diese Extras). Julian hat 1.0 unter Windows Server 2025 von Hand ausprobiert – lief.
-* GUI auf echten Desktops: 1.0 unter Debian 13 von Julian ausprobiert (seine Befunde →
-  1.1.0); nicht gezielt geprüft: X11/Wayland, Themes, HiDPI, Drag & Drop, Dateidialoge.
-  Die Neuerungen aus 1.1.0 (HIBP-Abfrage, Passwort-Vorschlag) in GUI und TUI sind bisher
+* macOS: GUI und FUSE ungetestet (die CI-Jobs dort laufen ohne diese Extras).
+  `mount` ist nur für Linux und macOS vorgesehen.
+* GUI auf echten Desktops: Julian hat sie von Hand ausprobiert – 1.0 unter Debian 13
+  (seine Befunde → 1.1.0) und 1.0.1 von PyPI unter Windows Server 2025, beides lief.
+  Nicht gezielt geprüft: X11/Wayland, Themes, HiDPI, Drag & Drop, Dateidialoge. Die
+  Neuerungen aus 1.1.0 (HIBP-Abfrage, Passwort-Vorschlag) in GUI und TUI sind bisher
   nur automatisch getestet.
 * FIDO2 mit echter Hardware (YubiKey o. Ä.) inkl. PIN.
 * Gewinn des Hintergrund-Dekodierers auf Mehrkern-Rechnern messen (`verify (zstd)`).
