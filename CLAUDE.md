@@ -46,6 +46,10 @@ lehnt PyPI als zu ähnlich zu `tresor` ab) – Import und Befehl bleiben `tres0r
   Signatur prüfen, dann verschieben. Text von außen in TUI (`rich.markup.escape`) und
   GUI (reiner Text) nie als Markup.
 * **Jeder Fund** (Fuzzing, Test, Bildschirmfoto) bekommt einen Regressionstest.
+* **Branch-Schutz:** `main` nimmt nur PRs an; ein Ruleset (Settings → Rules) verlangt
+  alle 9 CI-Checks unter ihren **Jobnamen** aus `ci.yml`. Wer einen Job umbenennt oder
+  hinzufügt, passt das Ruleset mit an – sonst wartet jede PR auf einen Check, der nie
+  kommt („Expected – Waiting for status to be reported“).
 
 ## Befehle
 
