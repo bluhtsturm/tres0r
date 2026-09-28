@@ -87,14 +87,17 @@ jobs:
           path: dist/
 
   portability:
-    name: Erprobung · ${{ matrix.os }}
+    name: ${{ matrix.label }} · Python 3.12
     runs-on: ${{ matrix.os }}
     timeout-minutes: 20
-    continue-on-error: true  # nie auf diesen Systemen getestet – Befunde ansehen, CI nicht rot färben
     strategy:
       fail-fast: false
       matrix:
-        os: [windows-latest, macos-latest]
+        include:
+          - os: windows-latest
+            label: Windows
+          - os: macos-latest
+            label: macOS
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-python@v7
