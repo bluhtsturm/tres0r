@@ -112,9 +112,10 @@ mit eigenem Index, Prüfung auf hängende Threads nach jedem Test),
 * GUI auf echten Desktops: Julian hat sie von Hand ausprobiert – 1.0 unter Debian 13
   (seine Befunde → 1.1.0) und 1.0.1 von PyPI unter Windows Server 2025, beides lief.
   Nicht gezielt geprüft: X11/Wayland, Themes, HiDPI, Drag & Drop, Dateidialoge.
-  Aus 1.1.0 hat Julian die Datenleck-Warnung, „Passwort vorschlagen“ und den Abbruch
-  mit Esc von Hand bestätigt. Die Längenwahl der Vorschläge (1.2.0) ist bisher nur
-  automatisch getestet.
+  Von Hand bestätigt hat Julian außerdem aus 1.1.0 die Datenleck-Warnung, „Passwort
+  vorschlagen“ und den Abbruch mit Esc, aus 1.2.0 die Längenwahl: Die GUI kopiert 40
+  Wörter als eine Zeile; die TUI bricht sie korrekt um, zeigt den Hinweis unter 80 Bit
+  und lehnt 41 Wörter mit der Meldung der CLI ab.
 * FIDO2 mit echter Hardware (YubiKey o. Ä.) inkl. PIN.
 * Gewinn des Hintergrund-Dekodierers auf Mehrkern-Rechnern messen (`verify (zstd)`).
 * Später: Post-Quanten-Empfänger (Slot-Typ 4, reserviert), paralleles Dekomprimieren
