@@ -76,15 +76,21 @@ mit eigenem Index, Prüfung auf hängende Threads nach jedem Test),
   (Puffer wird bei jedem kleinen read umkopiert); nur `copybufsize` beim Schreiben groß.
 * **tarfile `data_filter`** lässt `a/../b` zu (bleibt im Ziel) → `_NameGuard` lehnt `..` ab.
 * **`passgen.Secret`:** `str()` ist absichtlich geschwärzt – immer `.value`.
-* **Passphrasen/Anteile anzeigen:** nie abschneiden, nie nach `-` umbrechen lassen
-  (TUI: eigene Zeile; GUI: einzeiliges Feld in voller Breite; Anteile in Vierergruppen).
+* **Passphrasen/Anteile anzeigen:** nie abschneiden, nie nach `-` umbrechen lassen.
+  Vorschläge (bis 40 Wörter/128 Zeichen) über `passgen._display_lines`: nur zwischen
+  Wörtern, das `-` beginnt die Folgezeile; GUI `SecretView` kopiert ohne Umbrüche, TUI
+  bricht bei Größenänderung neu um. Rich bricht Text ohne Leerzeichen sonst an
+  beliebiger Stelle um (auch mitten im Wort). Anteile in Vierergruppen.
 * **python-fido2 2.x:** Erweiterungsergebnisse sind base64url-Text (`websafe_decode`);
   vor jedem getAssertion eine Vorabanfrage mit `up=False`; PIN nur beim Registrieren.
 * **Textual:** Klicks ~0,2 s nach einem Klick auf denselben Knopf werden ignoriert
   (Tests: pausieren); versteckte Eingabefelder fangen Fokus/Tasten → `disabled`;
   `Screen` hat eigene Attribute (`task` …) – eigene Namen eindeutig wählen.
 * **Qt:** `QLabel` deutet Text als HTML → `setTextFormat(Qt.PlainText)`;
-  `adjustSize()` vergrößert sichtbare Dialoge nicht zuverlässig.
+  `adjustSize()` vergrößert sichtbare Dialoge nicht zuverlässig. Umbrechende Labels
+  bekommen im Formular die Höhe ihrer *schmalen* Wunschbreite → Höhe nach dem Layout
+  selbst setzen; vor `sizeHint()` des Fensters die innere Ebene zuerst `activate()`,
+  sonst ist die Wunschhöhe veraltet (Dialog zu niedrig, Knöpfe verdecken Inhalt).
 * **Tests mit Import-Sperren:** `from . import x` prüft zuerst das Paket-Attribut, dann
   `sys.modules` – beides sperren. Dateinamen können kein `/` enthalten (Markup-Tests
   mit öffnenden Tags).
@@ -101,9 +107,10 @@ mit eigenem Index, Prüfung auf hängende Threads nach jedem Test),
   `mount` ist nur für Linux und macOS vorgesehen.
 * GUI auf echten Desktops: Julian hat sie von Hand ausprobiert – 1.0 unter Debian 13
   (seine Befunde → 1.1.0) und 1.0.1 von PyPI unter Windows Server 2025, beides lief.
-  Nicht gezielt geprüft: X11/Wayland, Themes, HiDPI, Drag & Drop, Dateidialoge. Die
-  Neuerungen aus 1.1.0 (HIBP-Abfrage, Passwort-Vorschlag) in GUI und TUI sind bisher
-  nur automatisch getestet.
+  Nicht gezielt geprüft: X11/Wayland, Themes, HiDPI, Drag & Drop, Dateidialoge.
+  Aus 1.1.0 hat Julian die Datenleck-Warnung, „Passwort vorschlagen“ und den Abbruch
+  mit Esc von Hand bestätigt. Die Längenwahl der Vorschläge (danach) ist bisher nur
+  automatisch getestet.
 * FIDO2 mit echter Hardware (YubiKey o. Ä.) inkl. PIN.
 * Gewinn des Hintergrund-Dekodierers auf Mehrkern-Rechnern messen (`verify (zstd)`).
 * Später: Post-Quanten-Empfänger (Slot-Typ 4, reserviert), paralleles Dekomprimieren

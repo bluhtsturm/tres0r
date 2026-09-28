@@ -1,5 +1,32 @@
 # Changelog
 
+## Unveröffentlicht
+
+### Grafische und Textoberfläche (Wunsch aus dem Handtest von 1.1.0)
+
+* **Länge der Vorschläge wählbar** – wie `-w`/`-n` der CLI: je ein Zahlenfeld neben
+  (GUI) bzw. über (TUI) „Passphrase vorschlagen“ (8–40 Wörter, Standard 8) und
+  „Passwort vorschlagen“ (8–128 Zeichen, Standard 20); die Grenzen stammen aus `pwgen`.
+  Unter 80 Bit – bei Passwörtern unter 14 Zeichen – steht derselbe Hinweis wie in der
+  CLI („für einen Container eher knapp“). Das TUI-Feld nimmt nur Ziffern; ungültige
+  Werte lehnt sie mit derselben Meldung ab wie die CLI.
+* **Lange Vorschläge vollständig und eindeutig:** 40 Wörter (rund 370 Zeichen) passen in
+  keine Zeile. Umbrochen wird nur zwischen Wörtern, und der Bindestrich beginnt dann die
+  nächste Zeile – keine Zeile endet auf „-“ (liest sich wie eine Silbentrennung).
+  Passwörter kommen in gleich langen Stücken. In der GUI liefert Markieren und Kopieren
+  den Vorschlag ohne die Zeilenumbrüche; die TUI bricht nach einer Größenänderung des
+  Terminals neu um.
+
+### Behoben
+
+* **TUI bei 80 Spalten:** Eine Standard-Passphrase mit mehr als 74 Zeichen – gut jede
+  dritte – brach Rich an beliebiger Stelle um, auch mitten im Wort und ohne
+  Kennzeichnung (nachgestellt: „…-giftschla⏎nge-bitumen“). Jetzt gilt die Umbruchregel
+  von oben; der Platz für die Bildlaufleiste ist fest reserviert, damit die Breite
+  nicht nachträglich schrumpft.
+* **GUI:** Über dem Hinweis zum Vorschlag stand eine Lücke – Qt reservierte für das
+  umbrechende Label die Höhe seiner schmalen Wunschbreite (6 statt 2 Zeilen).
+
 ## 1.1.0 – Datenleck-Prüfung und Passwort-Vorschläge in GUI und TUI
 
 Format, Python-API und Kommandozeile sind unverändert.

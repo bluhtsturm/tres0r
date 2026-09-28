@@ -18,13 +18,13 @@ from datetime import datetime
 from pathlib import Path
 from typing import Callable
 
-from PySide6.QtCore import QDir, QLibraryInfo, QLocale, QObject, Qt, QTranslator, Signal, Slot
+from PySide6.QtCore import QDir, QLibraryInfo, QLocale, QMimeData, QObject, Qt, QTranslator, Signal, Slot
 from PySide6.QtGui import QAction, QFont, QKeySequence
 from PySide6.QtWidgets import (QAbstractItemView, QApplication, QCheckBox, QComboBox, QDialog, QDialogButtonBox,
-                               QFileDialog, QFileSystemModel, QFormLayout, QHBoxLayout, QHeaderView, QInputDialog,
-                               QLabel, QLineEdit, QMainWindow, QMessageBox, QPlainTextEdit, QProgressBar, QPushButton,
-                               QSplitter, QTableWidget, QTableWidgetItem, QTreeView, QTreeWidget, QTreeWidgetItem,
-                               QVBoxLayout, QWidget)
+                               QFileDialog, QFileSystemModel, QFormLayout, QGridLayout, QHBoxLayout, QHeaderView,
+                               QInputDialog, QLabel, QLineEdit, QMainWindow, QMessageBox, QPlainTextEdit, QProgressBar,
+                               QPushButton, QSpinBox, QSplitter, QTableWidget, QTableWidgetItem, QTreeView, QTreeWidget,
+                               QTreeWidgetItem, QVBoxLayout, QWidget)
 
 from . import container, hwtoken, keys, passgen
 from .errors import Cancelled, Tres0rError, WrongPassword
@@ -165,9 +165,47 @@ class ProgressDialog(QDialog):
 # ---------------------------------------------------------------------------
 # Dialoge
 # ---------------------------------------------------------------------------
+class SecretView(QPlainTextEdit):
+    """Vorschlag zum Abschreiben: ganz sichtbar, nur an eindeutigen Stellen umbrochen
+    (``passgen._display_lines`` – nie endet eine Zeile auf "-"). Markieren und Kopieren
+    liefert das Geheimnis ohne die Zeilenumbrüche."""
+
+    COLUMNS = 100  # die Standardvorschläge passen in eine Zeile; bis 40 Wörter bzw. 128 Zeichen in mehrere
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.setReadOnly(True)
+        self.setFont(QFont("monospace"))
+        self.setLineWrapMode(QPlainTextEdit.NoWrap)  # umbrochen wird nur an unseren Stellen
+        self.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self._value = ""
+
+    def show_secret(self, secret: passgen.Secret) -> list[str]:
+        self._value = secret.value
+        lines = passgen._display_lines(secret, self.COLUMNS)
+        self.setPlainText("\n".join(lines))
+        # so groß wie der Inhalt: nichts abgeschnitten, kein Scrollen nötig
+        metrics = self.fontMetrics()
+        frame = 2 * (self.frameWidth() + round(self.document().documentMargin()))
+        self.setFixedSize(max(metrics.horizontalAdvance(line) for line in lines) + frame + 8,
+                          metrics.lineSpacing() * len(lines) + frame + 4)
+        return lines
+
+    def text(self) -> str:
+        """Das Geheimnis selbst, ohne Zeilenumbrüche."""
+        return self._value
+
+    def createMimeDataFromSelection(self) -> QMimeData:  # Kopieren, Ziehen: ohne Umbrüche (Qt: U+2029)
+        data = QMimeData()
+        data.setText(self.textCursor().selectedText().replace("\u2029", "").replace("\n", ""))
+        return data
+
+
 class PasswordFields(QWidget):
     """Passwort + Wiederholung mit Stärkeanzeige, optionalem Vorschlag (Passphrase oder
-    Passwort) und der Wahl, ob beim Bestätigen online gegen Datenlecks geprüft wird."""
+    Passwort, Länge wählbar wie mit ``-w``/``-n`` der CLI) und der Wahl, ob beim Bestätigen
+    online gegen Datenlecks geprüft wird."""
 
     def __init__(self, suggest: bool = True) -> None:
         super().__init__()
@@ -186,22 +224,34 @@ class PasswordFields(QWidget):
         self.online.setToolTip("Nur die ersten 5 Zeichen des SHA-1-Hashes gehen an api.pwnedpasswords.com "
                                "(k-Anonymität) – das Passwort selbst verlässt den Rechner nicht.")
         form.addRow("", self.online)
-        # Vorschlag einzeilig: ein Umbruch nach "-" wäre beim Abschreiben mehrdeutig
         self._suggested: str | None = None
-        self.suggestion = QLineEdit()
-        self.suggestion.setReadOnly(True)
-        self.suggestion.setFont(QFont("monospace"))
+        self.suggestion = SecretView()
         self.suggestion.setVisible(False)
         self.suggestion_hint = _plain(QLabel(""))
+        self.suggestion_hint.setVisible(False)
+        # Länge wie -w/-n der CLI, Grenzen aus pwgen; ein Zahlenfeld statt eines Schiebereglers
+        self.words, self.length = QSpinBox(), QSpinBox()
+        self.words.setRange(passgen.PASSPHRASE_MIN_WORDS, passgen.PASSPHRASE_MAX_WORDS)
+        self.words.setValue(passgen.DEFAULT_WORDS)
+        self.words.setSuffix(" Wörter")
+        self.words.setToolTip(f"Wörter je Passphrase ({passgen.PASSPHRASE_MIN_WORDS}–{passgen.PASSPHRASE_MAX_WORDS}, "
+                              "wie -w in der CLI)")
+        self.length.setRange(passgen.PASSWORD_MIN_LEN, passgen.PASSWORD_MAX_LEN)
+        self.length.setValue(passgen.DEFAULT_PASSWORD_LEN)
+        self.length.setSuffix(" Zeichen")
+        self.length.setToolTip(f"Zeichen je Passwort ({passgen.PASSWORD_MIN_LEN}–{passgen.PASSWORD_MAX_LEN}, "
+                               "wie -n in der CLI)")
         if suggest:
             buttons = QWidget()
-            row = QHBoxLayout(buttons)
-            row.setContentsMargins(0, 0, 0, 0)
-            for label, kind in (("Passphrase vorschlagen", "passphrase"), ("Passwort vorschlagen", "passwort")):
+            grid = QGridLayout(buttons)
+            grid.setContentsMargins(0, 0, 0, 0)
+            for row, (label, kind, amount) in enumerate((("Passphrase vorschlagen", "passphrase", self.words),
+                                                         ("Passwort vorschlagen", "passwort", self.length))):
                 button = QPushButton(label)
                 button.clicked.connect(lambda _checked=False, kind=kind: self.suggest(kind))
-                row.addWidget(button)
-            row.addStretch()
+                grid.addWidget(button, row, 0)
+                grid.addWidget(amount, row, 1)
+            grid.setColumnStretch(2, 1)
             form.addRow("", buttons)
             form.addRow("", self.suggestion_hint)
             form.addRow("", self.suggestion)
@@ -216,6 +266,7 @@ class PasswordFields(QWidget):
         if not suggested:  # eigenes Passwort: der Vorschlag gilt nicht mehr – nicht stehen lassen
             self.suggestion.setVisible(False)
             self.suggestion_hint.setText("")
+            self.suggestion_hint.setVisible(False)
         if not text or suggested:
             self.strength.setText("")
             return
@@ -223,30 +274,44 @@ class PasswordFields(QWidget):
         self.strength.setText("Stärke: in Ordnung" if check.ok else "Stärke: " + "; ".join(check.warnings))
 
     def suggest(self, kind: str = "passphrase") -> None:
-        """Zufälliges Geheimnis vorschlagen: ``"passphrase"`` (Wörter) oder ``"passwort"``
-        (20 Zeichen). Das Passwort kommt ohne Sonderzeichen und ohne Verwechselbares
-        (0/O, 1/l/I) aus – ^ und ` sind auf deutschen Tastaturen Tottasten, und beim
-        Abschreiben zählt jedes Zeichen; es hat trotzdem gut 110 Bit."""
-        secret = (passgen.generate_password(symbols=False, exclude_ambiguous=True) if kind == "passwort"
-                  else passgen.generate_passphrase())
+        """Zufälliges Geheimnis vorschlagen: ``"passphrase"`` (so viele Wörter wie im Feld
+        ``words``) oder ``"passwort"`` (Zeichen wie im Feld ``length``). Das Passwort kommt
+        ohne Sonderzeichen und ohne Verwechselbares (0/O, 1/l/I) aus – ^ und ` sind auf
+        deutschen Tastaturen Tottasten, und beim Abschreiben zählt jedes Zeichen; mit den
+        voreingestellten 20 Zeichen hat es trotzdem gut 110 Bit."""
+        secret = (passgen.generate_password(self.length.value(), symbols=False, exclude_ambiguous=True)
+                  if kind == "passwort" else passgen.generate_passphrase(self.words.value()))
         self._suggested = secret.value  # str(secret) ist absichtlich geschwärzt
         self.password.setText(secret.value)
         self.confirm.setText(secret.value)
-        self.suggestion_hint.setText(f"Vorschlag ({secret.entropy_bits:.0f} Bit) – bitte vollständig notieren "
-                                     "(markieren und kopieren möglich):")
-        self.suggestion.setText(secret.value)
+        lines = self.suggestion.show_secret(secret)
+        hint = f"Vorschlag ({secret.entropy_bits:.0f} Bit) – bitte vollständig notieren (markieren und kopieren möglich"
+        hint += "; die Zeilenumbrüche gehören nicht dazu):" if len(lines) > 1 else "):"
+        if not secret.strong_enough:  # wie die CLI
+            hint = f"Hinweis: unter {passgen.RECOMMENDED_BITS} Bit – für einen Container eher knapp.\n" + hint
+        self.suggestion_hint.setText(hint)
+        self.suggestion_hint.setVisible(True)
         self.suggestion.setVisible(True)
-        self.suggestion.setCursorPosition(0)
         # ganz sichtbar, ohne Scrollen – sonst übersieht man beim Abschreiben das Ende. Das Feld
-        # selbst wird sofort breit genug, ragte aber über den Dialogrand hinaus (gemessen: 48 px
+        # selbst hat sofort seine Größe, ragte aber über den Dialogrand hinaus (gemessen: 48 px
         # abgeschnitten, Hinweis darüber zu niedrig) – deshalb das ganze Fenster auf seine neue
         # Wunschgröße bringen (adjustSize() vergrößert sichtbare Dialoge nicht zuverlässig).
-        self.suggestion.setMinimumWidth(self.suggestion.fontMetrics().horizontalAdvance(secret.value) + 24)
         window = self.window()
+        before = window.height()
+        # Der umbrechende Hinweis bekäme sonst die Höhe für seine schmale Wunschbreite (6 statt
+        # 2 Zeilen) und stünde mit Lücken darüber und darunter (Bildschirmfoto mit 40 Wörtern) –
+        # also vorläufig eine Zeile, die echte Höhe erst, wenn die Breite feststeht.
+        hint = self.suggestion_hint
+        hint.setFixedHeight(hint.fontMetrics().lineSpacing())
         self.layout().activate()  # zuerst die eigene Ebene – sonst ist die Wunschgröße des Dialogs veraltet
         window.layout().activate()
-        wanted = window.sizeHint()
-        window.resize(max(window.width(), wanted.width()), max(window.height(), wanted.height()))
+        width = max(window.width(), window.sizeHint().width())
+        window.resize(width, window.height())
+        window.layout().activate()
+        hint.setFixedHeight(hint.heightForWidth(hint.width()))
+        self.layout().activate()  # wieder innen zuerst – sonst ist die Wunschhöhe veraltet (Dialog zu niedrig)
+        window.layout().activate()
+        window.resize(width, max(before, window.sizeHint().height()))
 
     def value(self) -> str | None:
         """Passwort oder None (mit Hinweis im Stärkefeld), wenn leer oder abweichend."""
@@ -322,6 +387,7 @@ class PackDialog(QDialog):
         layout.addLayout(form)
         self.passwords = PasswordFields()
         layout.addWidget(self.passwords)
+        layout.addStretch()  # übrige Höhe (nach einem längeren Vorschlag) hier, nicht zwischen den Zeilen
         buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
         buttons.button(QDialogButtonBox.Ok).setText("Packen")
         buttons.accepted.connect(self._accept)

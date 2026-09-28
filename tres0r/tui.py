@@ -808,7 +808,7 @@ class BrowseScreen(Screen):
 class PackScreen(Screen):
     BINDINGS = [Binding("escape", "back", "Zurück")]
     DEFAULT_CSS = """
-    #form { padding: 0 2; }
+    #form { padding: 0 2; scrollbar-gutter: stable; }  /* Breite fest: der Vorschlag ist darauf umbrochen */
     #form Horizontal { height: auto; }
     #form Switch { margin-right: 1; }
     #form Horizontal Label { padding-top: 1; }
@@ -817,12 +817,16 @@ class PackScreen(Screen):
     #form Input { border-title-color: $accent; }
     #level-row Label { width: 7; }
     #level-row Select { width: 1fr; }
+    #lengths Input { margin-right: 2; }
+    #words, #suggest { width: 26; }
+    #length, #suggest-password { width: 24; }
     """
 
     def __init__(self, sources: list[Path]) -> None:
         super().__init__()
         self.sources = sources
         self._suggested: str | None = None
+        self._secret: passgen.Secret | None = None
 
     def compose(self) -> ComposeResult:
         first = self.sources[0]
@@ -851,6 +855,13 @@ class PackScreen(Screen):
             with Horizontal():  # wie die CLI (dort abschaltbar mit --offline); geprüft wird beim Packen
                 yield Switch(value=True, id="online")
                 yield Label("beim Packen gegen bekannte Datenlecks prüfen (HIBP, online)")
+            with Horizontal(id="lengths"):  # Länge wie -w/-n der CLI – jeweils über dem passenden Knopf
+                words = Input(str(passgen.DEFAULT_WORDS), restrict=r"[0-9]*", max_length=2, id="words")
+                words.border_title = f"Wörter ({passgen.PASSPHRASE_MIN_WORDS}–{passgen.PASSPHRASE_MAX_WORDS})"
+                yield words
+                length = Input(str(passgen.DEFAULT_PASSWORD_LEN), restrict=r"[0-9]*", max_length=3, id="length")
+                length.border_title = f"Zeichen ({passgen.PASSWORD_MIN_LEN}–{passgen.PASSWORD_MAX_LEN})"
+                yield length
             with Horizontal():
                 yield Button("Passphrase vorschlagen", id="suggest")
                 yield Button("Passwort vorschlagen", id="suggest-password")
@@ -870,21 +881,48 @@ class PackScreen(Screen):
 
     @on(Button.Pressed, "#suggest")
     def _suggest(self) -> None:
-        self._offer(passgen.generate_passphrase())
+        self._offer(lambda: passgen.generate_passphrase(self._amount("#words")))
 
     @on(Button.Pressed, "#suggest-password")
     def _suggest_password(self) -> None:
         # ohne Sonderzeichen (^ und ` sind auf deutschen Tastaturen Tottasten) und ohne
-        # Verwechselbares (0/O, 1/l/I) – der Vorschlag wird abgeschrieben; gut 110 Bit
-        self._offer(passgen.generate_password(symbols=False, exclude_ambiguous=True))
+        # Verwechselbares (0/O, 1/l/I) – der Vorschlag wird abgeschrieben; mit 20 Zeichen gut 110 Bit
+        self._offer(lambda: passgen.generate_password(self._amount("#length"), symbols=False,
+                                                      exclude_ambiguous=True))
 
-    def _offer(self, secret: passgen.Secret) -> None:
-        text = secret.value  # str(secret) ist absichtlich geschwärzt
-        self._suggested = text
+    def _amount(self, selector: str) -> int:
+        text = self.query_one(selector, Input).value
+        return int(text) if text.isdigit() else 0  # leer zählt als außerhalb der Grenzen
+
+    def _offer(self, make: Callable[[], passgen.Secret]) -> None:
+        try:
+            secret = make()
+        except ValueError as e:  # Länge außerhalb der Grenzen – dieselbe Meldung wie in der CLI
+            self.notify(escape(str(e)), severity="error")
+            return
+        self._secret, self._suggested = secret, secret.value  # str(secret) ist absichtlich geschwärzt
         for field in ("#password", "#confirm"):
-            self.query_one(field, Input).value = text
-        self.query_one("#strength", Label).update(  # eigene Zeile: das Geheimnis muss ganz lesbar sein
-            f"Vorschlag ({secret.entropy_bits:.0f} Bit) – bitte vollständig notieren:\n[b]{escape(text)}[/]")
+            self.query_one(field, Input).value = secret.value
+        self._show_suggestion()
+
+    def _show_suggestion(self) -> None:
+        """Vorschlag in eigenen Zeilen, ganz lesbar: selbst umbrochen (nur zwischen Wörtern, nie
+        nach "-") auf die tatsächliche Breite – Rich bräche einen langen Vorschlag an
+        beliebiger Stelle um, bei 80 Spalten schon manche Standard-Passphrase."""
+        secret = self._secret
+        if secret is None or self.query_one("#password", Input).value != secret.value:
+            return  # eigenes Passwort eingegeben: dort steht jetzt die Stärke
+        label = self.query_one("#strength", Label)
+        lines = passgen._display_lines(secret, label.content_size.width or 60)  # vor dem Layout: 0
+        note = ", ohne die Zeilenumbrüche" if len(lines) > 1 else ""
+        text = (f"Vorschlag ({secret.entropy_bits:.0f} Bit) – bitte vollständig notieren{note}:\n[b]"
+                + "\n".join(escape(line) for line in lines) + "[/]")
+        if not secret.strong_enough:  # wie die CLI
+            text += f"\n[yellow]Hinweis: unter {passgen.RECOMMENDED_BITS} Bit – für einen Container eher knapp.[/]"
+        label.update(text)
+
+    def on_resize(self) -> None:  # andere Breite: den Vorschlag neu umbrechen
+        self.call_after_refresh(self._show_suggestion)
 
     @on(Button.Pressed, "#start")
     def _start(self) -> None:

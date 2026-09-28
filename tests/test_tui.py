@@ -146,6 +146,80 @@ def test_suggested_passphrase_is_the_real_one(project, tmp_path):
     assert container.verify(tmp_path / "Projekt.tres0r", shown["phrase"]).files == 2
 
 
+def suggestion_lines(app) -> list[str]:
+    """Die Zeilen des angezeigten Vorschlags (ohne Überschrift und Hinweis)."""
+    return [line for line in text(app, "#strength").splitlines()[1:] if not line.startswith("Hinweis")]
+
+
+def test_suggestion_length_can_be_chosen(project, tmp_path, hibp):
+    """Wunsch aus dem Handtest von 1.1.0: die Länge wählen wie mit -w/-n der CLI – bis 40
+    Wörter bzw. 128 Zeichen. Lange Vorschläge brechen nur zwischen Wörtern um, auch nach
+    einer Größenänderung; ungültige Längen melden dasselbe wie die CLI."""
+    chosen, messages = {}, []
+
+    async def scenario(app, pilot):
+        app.select(project)
+        await pilot.press("p")
+        screen = app.screen
+        screen.notify = lambda message, **kwargs: messages.append(message)
+        assert screen.query_one("#words", Input).value == "8" and screen.query_one("#length", Input).value == "20"
+        screen.query_one("#length", Input).value = "128"
+        await click(app, pilot, "#suggest-password")
+        assert len(screen.query_one("#password", Input).value) == 128
+        screen.query_one("#words", Input).value = "41"
+        await click(app, pilot, "#suggest")
+        assert messages == ["Wortanzahl muss zwischen 8 und 40 liegen."]
+        assert len(screen.query_one("#password", Input).value) == 128  # nichts verändert
+        screen.query_one("#words", Input).value = "40"
+        await pilot.pause(CLICK_PAUSE)
+        await click(app, pilot, "#suggest")
+        phrase = screen.query_one("#password", Input).value
+        assert len(phrase.split("-")) == 40 and screen.query_one("#confirm", Input).value == phrase
+        for size in ((80, 24), (120, 40)):  # schmaler und wieder breiter: jedes Mal neu umbrochen
+            await pilot.resize_terminal(*size)
+            await pilot.pause(0.3)
+            lines = suggestion_lines(app)
+            width = screen.query_one("#strength", Label).content_size.width
+            assert len(lines) > 1 and "".join(lines) == phrase
+            assert not any(line.endswith("-") for line in lines) and all(len(line) <= width for line in lines)
+        assert "ohne die Zeilenumbrüche" in text(app, "#strength") and "unter 80 Bit" not in text(app, "#strength")
+        chosen["phrase"] = phrase
+        await click(app, pilot, "#start")
+        await finish_progress(app, pilot)
+    run(scenario, tmp_path)
+    assert hibp["asked"] == []  # Vorschläge sind zufällig: keine Abfrage
+    assert container.verify(tmp_path / "Projekt.tres0r", chosen["phrase"]).files == 2
+
+
+def test_short_suggestion_warns_and_bad_length_is_refused(project, tmp_path):
+    """8 Zeichen sind erlaubt (wie -n 8), haben aber nur 46 Bit – derselbe Hinweis wie in der
+    CLI. Leere oder zu große Längen erzeugen nichts."""
+    messages = []
+
+    async def scenario(app, pilot):
+        app.select(project)
+        await pilot.press("p")
+        screen = app.screen
+        screen.notify = lambda message, **kwargs: messages.append(message)
+        screen.query_one("#length", Input).value = "8"
+        await click(app, pilot, "#suggest-password")
+        password = screen.query_one("#password", Input).value
+        assert len(password) == 8 and suggestion_lines(app) == [password]
+        assert "unter 80 Bit – für einen Container eher knapp" in text(app, "#strength")
+        for bad in ("", "129"):
+            screen.query_one("#length", Input).value = bad
+            await pilot.pause(CLICK_PAUSE)
+            await click(app, pilot, "#suggest-password")
+        assert messages == ["Passwortlänge muss zwischen 8 und 128 liegen."] * 2
+        assert screen.query_one("#password", Input).value == password
+        field = screen.query_one("#length", Input)
+        field.value = ""
+        field.focus()
+        await pilot.press("a", "1", "x", "2", "-", "8", "9")  # getippt: nur Ziffern, höchstens drei
+        assert field.value == "128"
+    run(scenario, tmp_path)
+
+
 def test_open_browse_and_extract(project, tmp_path):
     out = container.create([project], tmp_path / "c.tres0r", PASSWORD, FAST).path
     dest = tmp_path / "ziel"

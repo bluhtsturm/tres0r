@@ -9,7 +9,7 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 pytest.importorskip("PySide6.QtWidgets")
 
 from PySide6.QtCore import QPoint, Qt  # noqa: E402
-from PySide6.QtWidgets import QApplication, QDialog, QPushButton  # noqa: E402
+from PySide6.QtWidgets import QApplication, QDialog, QDialogButtonBox, QPushButton  # noqa: E402
 
 from tres0r import container, gui, passgen, shamir  # noqa: E402
 from tres0r.errors import Cancelled, HibpUnavailable, WrongPassword  # noqa: E402
@@ -479,6 +479,70 @@ def test_password_can_be_suggested_instead_of_passphrase(app, tmp_path, project,
     window.pack([project])
     assert hibp["asked"] == [] and not driver.errors
     assert container.verify(tmp_path / "Projekt.tres0r", chosen["password"]).files == 2
+
+
+def test_suggestion_length_can_be_chosen_like_cli(app, tmp_path, project, hibp):
+    """Wunsch aus dem Handtest von 1.1.0: die Länge wählen wie mit -w/-n der CLI – bis 40
+    Wörter bzw. 128 Zeichen. Lange Vorschläge sind ganz sichtbar, brechen nie nach "-" um,
+    und Kopieren liefert sie ohne die Zeilenumbrüche."""
+    window, driver = make(app, tmp_path)
+    chosen = {}
+
+    def pack_dialog(dialog):
+        dialog.show()
+        app.processEvents()
+        fields = dialog.passwords
+        assert (fields.words.minimum(), fields.words.maximum(), fields.words.value()) == (8, 40, 8)
+        assert (fields.length.minimum(), fields.length.maximum(), fields.length.value()) == (8, 128, 20)
+        fields.length.setValue(128)
+        fields.suggest("passwort")
+        assert len(fields.password.text()) == 128 and fields.password.text().isalnum()
+        fields.words.setValue(40)
+        fields.suggest("passphrase")
+        app.processEvents()
+        phrase = fields.password.text()
+        assert len(phrase.split("-")) == 40 and fields.confirm.text() == phrase
+        view = fields.suggestion
+        lines = view.toPlainText().split("\n")
+        assert len(lines) > 1 and "".join(lines) == phrase == view.text()
+        assert not any(line.endswith("-") for line in lines)
+        # ganz sichtbar: jede Zeile in der Breite, alle in der Höhe, über den Knöpfen und im Dialog
+        # (Bildschirmfoto: nach dem ersten Umbau verdeckten die Knöpfe die letzte Zeile)
+        metrics = view.fontMetrics()
+        assert view.viewport().width() >= max(metrics.horizontalAdvance(line) for line in lines)
+        assert view.viewport().height() >= metrics.lineSpacing() * len(lines)
+        bottom_right = view.mapTo(dialog, QPoint(view.width(), view.height()))
+        assert bottom_right.x() <= dialog.width()
+        assert bottom_right.y() <= dialog.findChild(QDialogButtonBox).geometry().top()
+        hint = fields.suggestion_hint
+        assert "Zeilenumbrüche gehören nicht dazu" in hint.text() and "unter 80 Bit" not in hint.text()
+        assert hint.height() >= hint.heightForWidth(hint.width())
+        view.selectAll()
+        view.copy()
+        assert QApplication.clipboard().text() == phrase
+        chosen["phrase"] = phrase
+        dialog._accept()
+        return dialog.result() == QDialog.Accepted
+    driver.handlers["PackDialog"] = pack_dialog
+    window.pack([project])
+    assert hibp["asked"] == [] and not driver.errors  # Vorschläge sind zufällig: keine Abfrage
+    assert container.verify(tmp_path / "Projekt.tres0r", chosen["phrase"]).files == 2
+
+
+def test_short_suggestion_warns_like_cli(app, project):
+    """8 Zeichen sind erlaubt (wie -n 8), haben aber nur 46 Bit – derselbe Hinweis wie in der CLI."""
+    dialog = gui.PackDialog(None, [project])
+    dialog.show()
+    fields = dialog.passwords
+    fields.length.setValue(8)
+    fields.suggest("passwort")
+    assert len(fields.password.text()) == 8 and "unter 80 Bit" in fields.suggestion_hint.text()
+    fields.length.setValue(14)
+    fields.suggest("passwort")
+    assert "unter 80 Bit" not in fields.suggestion_hint.text()
+    fields.password.setText("eigenes-passwort")  # eigenes Passwort: der Vorschlag verschwindet
+    assert fields.suggestion.isHidden() and fields.suggestion_hint.isHidden()
+    dialog.close()
 
 
 def test_new_password_in_key_management_is_checked_too(app, tmp_path, project, hibp):

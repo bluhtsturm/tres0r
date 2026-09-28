@@ -78,7 +78,7 @@ Format, Größe, Schlüssel-Slots, Signatur und Segmente.
 
 | Taste | Hauptansicht | im Inhaltsbaum | in der Schlüsselverwaltung |
 |---|---|---|---|
-| `p` | packen (Stufe, zstd, FIDO2, Passwort mit Stärkeanzeige und HIBP-Prüfung oder Vorschlag als Passphrase/Passwort) | | |
+| `p` | packen (Stufe, zstd, FIDO2, Passwort mit Stärkeanzeige und HIBP-Prüfung oder Vorschlag als Passphrase/Passwort mit wählbarer Länge) | | |
 | `o` | öffnen → Inhaltsbaum | | |
 | `v` | prüfen | prüfen | |
 | `a` | Datei/Ordner anhängen | alles entpacken | |
@@ -116,10 +116,13 @@ ein neues Passwort bekommt die Stufe des vorhandenen. Neue Phrasen und Anteile
 erscheinen einmal vollständig (Phrasen mit Leerzeichen zwischen den Wörtern, Anteile
 in Vierergruppen – so abgetippt gelten beide) und lassen sich als Dateien (0600)
 speichern. Beim
-Packen schlägt sie wahlweise eine Passphrase oder ein Passwort vor – in einem
-einzeiligen Feld, ein Zeilenumbruch nach einem Bindestrich wäre beim Abschreiben
-mehrdeutig. Selbst gewählte Passwörter prüft sie wie die CLI gegen bekannte
-Datenlecks (HIBP, per Häkchen abschaltbar). Namen und Fehlermeldungen werden
+Packen schlägt sie wahlweise eine Passphrase oder ein Passwort vor; die Länge wählt ein
+Zahlenfeld daneben (8–40 Wörter bzw. 8–128 Zeichen, wie `-w`/`-n` der CLI, unter 80 Bit
+mit Hinweis). Lange Vorschläge brechen nur zwischen Wörtern um, der Bindestrich beginnt
+dann die nächste Zeile – eine Zeile, die auf „-“ endet, wäre beim Abschreiben mehrdeutig;
+Markieren und Kopieren liefert den Vorschlag ohne die Umbrüche. Selbst gewählte
+Passwörter prüft sie wie die CLI gegen bekannte Datenlecks (HIBP, per Häkchen
+abschaltbar). Namen und Fehlermeldungen werden
 stets als reiner Text gezeigt (nie als HTML). Qt-eigene Texte folgen der
 Systemsprache. Nicht Teil der stabilen API.
 
