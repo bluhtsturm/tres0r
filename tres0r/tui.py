@@ -23,7 +23,7 @@ from textual.containers import Horizontal, Vertical, VerticalScroll
 from textual.screen import ModalScreen, Screen
 from textual.widgets import (Button, DataTable, DirectoryTree, Footer, Header, Input, Label, ProgressBar, Select,
                              Static, Switch, Tree)
-from textual.worker import Worker, WorkerState
+from textual.worker import Worker, WorkerState, get_current_worker
 
 from . import container, hwtoken, keys, passgen
 from .errors import Cancelled, Tres0rError, WrongPassword
@@ -91,6 +91,11 @@ class ProgressScreen(ModalScreen):
     def on_mount(self) -> None:
         monitor = Monitor(lambda ev: self.app.call_from_thread(self._show, ev), cancel=self.token, interval=0.1)
         self.run_worker(lambda: self._job(monitor), thread=True, exit_on_error=False, name="aufgabe")
+
+    def on_unmount(self) -> None:
+        # Oberfläche beendet, während die Aufgabe läuft: abbrechen wie mit „Abbrechen“ – sie liefe
+        # sonst unsichtbar weiter und hielte bis zu ihrem Ende das Prozessende auf.
+        self.token.cancel()
 
     def _show(self, event: ProgressEvent) -> None:
         bar = self.query_one("#bar", ProgressBar)
@@ -1034,14 +1039,21 @@ class Tres0rApp(App):
         return hwtoken.TokenProvider(notify=lambda msg: self.call_from_thread(self.notify, msg), pin=self.ask_pin)
 
     def ask_pin(self) -> str:
-        """Aus einem Arbeitsthread: PIN-Fenster zeigen und auf die Eingabe warten."""
+        """Aus einem Arbeitsthread: PIN-Fenster zeigen und auf die Eingabe warten.
+
+        Endet die Oberfläche vorher (Beenden bei offenem Fenster), bricht Textual den Worker ab –
+        dann nicht weiter warten: Der Thread hielte sonst das Prozessende für immer auf.
+        """
         answered, box = threading.Event(), {}
 
         def answer(value) -> None:
             box["pin"] = value
             answered.set()
+        worker = get_current_worker()
         self.call_from_thread(self.push_screen, PinScreen(), answer)
-        answered.wait()
+        while not answered.wait(0.1):
+            if worker.is_cancelled:
+                raise Cancelled("Abgebrochen.")
         if not box.get("pin"):
             raise WrongPassword("PIN-Eingabe abgebrochen.")
         return box["pin"]
