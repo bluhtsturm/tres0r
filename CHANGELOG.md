@@ -2,7 +2,24 @@
 
 ## Unveröffentlicht
 
-* **CI:** Die Windows- und macOS-Jobs sind jetzt verpflichtend – ein Fehler dort färbt
+### Grafische Oberfläche (Befunde aus dem Test unter Debian 13)
+
+* **Passwörter werden gegen bekannte Datenlecks geprüft (HIBP)** – bisher tat das nur
+  die CLI. Nach „Packen“ bzw. „OK“ gleicht die GUI ein selbst gewähltes Passwort mit
+  Pwned Passwords ab (k-Anonymität: nur die ersten 5 Zeichen des SHA-1-Hashes
+  verlassen den Rechner); abschaltbar per Häkchen, wie `--offline` in der CLI. Bei
+  einem Treffer, einem zu kurzen oder einförmigen Passwort oder nicht erreichbarem
+  Dienst fragt sie „Trotzdem verwenden?“ – „Nein“ führt zurück in den Dialog, die
+  Eingaben bleiben. Vorschläge des Generators werden nicht abgefragt (zufällig). Die
+  Abfrage lässt sich sofort abbrechen, auch wenn das Netz hängt (bis zu 20 s).
+* **„Passwort vorschlagen“** neben „Passphrase vorschlagen“: 20 Zeichen aus Buchstaben
+  und Ziffern ohne Verwechselbares (0/O, 1/l/I), gut 110 Bit. Ohne Sonderzeichen, weil
+  `^` und `` ` `` auf deutschen Tastaturen Tottasten sind und der Vorschlag
+  abgeschrieben wird.
+
+### CI
+
+* Die Windows- und macOS-Jobs sind jetzt verpflichtend – ein Fehler dort färbt
   die CI rot (vorher `continue-on-error`, zur Erprobung). Sie heißen jetzt
   „Windows · Python 3.12“ und „macOS · Python 3.12“.
 
