@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.0.1 – auf PyPI als `tres0r-crypt`
+
+Keine Änderung am Programmverhalten.
+
+* **PyPI-Paketname `tres0r-crypt`:** PyPI lehnt `tres0r` als zu ähnlich zum bestehenden
+  Projekt `tresor` ab (beim Namensvergleich gelten `0` und `o` als gleich). Import
+  (`import tres0r`) und Befehl (`tres0r`) bleiben; installiert wird mit
+  `pip install 'tres0r-crypt[…]'`. Installationshinweise in Programm, README und
+  `release.yml` angepasst. 1.0.0 ist nur als GitHub-Release erschienen.
+
 ## 1.0.0 – erste stabile Version
 
 ### Behoben (Befunde der ersten GitHub-CI)

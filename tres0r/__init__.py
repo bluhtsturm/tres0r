@@ -11,7 +11,7 @@ Alle anderen Module und alle Namen mit ``_`` sind intern und können sich änder
     result = create(["Projekt"], "Projekt.tres0r", "passwort")
     extract("Projekt.tres0r", "ziel", Credentials(passwords=["passwort"]))
 """
-__version__ = "1.0.0"
+__version__ = "1.0.1"
 
 from . import errors, hwtoken, keys, passgen, progress, shamir
 from .container import (

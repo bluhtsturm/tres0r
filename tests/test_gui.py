@@ -475,4 +475,4 @@ def test_cli_without_pyside(monkeypatch, capsys):
     from tres0r.cli import main
 
     assert main(["gui"]) == 1
-    assert "tres0r[gui]" in capsys.readouterr().err
+    assert "tres0r-crypt[gui]" in capsys.readouterr().err

@@ -1,4 +1,4 @@
-"""Textoberfläche (Textual) – ``tres0r tui [ORDNER]``, Extra ``tres0r[tui]``.
+"""Textoberfläche (Textual) – ``tres0r tui [ORDNER]``, Extra ``tres0r-crypt[tui]``.
 
 Links ein Dateibaum, rechts Details zur Auswahl. Container lassen sich öffnen
 (Inhaltsbaum aus dem Inhaltsverzeichnis), entpacken und prüfen; Dateien und Ordner

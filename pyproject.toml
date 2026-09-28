@@ -3,8 +3,8 @@ requires = ["setuptools>=77"]  # PEP 639: SPDX-Lizenzausdruck
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "tres0r"
-version = "1.0.0"
+name = "tres0r-crypt"
+version = "1.0.1"
 description = "Dateien, Ordner und Datenströme verschlüsseln – Argon2id + ChaCha20-Poly1305, mehrere Schlüssel, Signaturen, Anhängen, Einhängen"
 readme = "README.md"
 license = "MIT"
