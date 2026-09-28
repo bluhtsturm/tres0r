@@ -1,4 +1,4 @@
-"""Grafische Oberfläche (PySide6) – ``tres0r gui [ORDNER]``, Extra ``tres0r[gui]``.
+"""Grafische Oberfläche (PySide6) – ``tres0r gui [ORDNER]``, Extra ``tres0r-crypt[gui]``.
 
 Baut nur auf der stabilen API auf; nicht selbst Teil davon. Lange Vorgänge laufen
 in Threads und melden sich über Qt-Signale (werden im GUI-Thread zugestellt).

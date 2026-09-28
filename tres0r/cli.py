@@ -1114,7 +1114,7 @@ def cmd_gui(args: argparse.Namespace, ui: Ui) -> int:
     try:
         from . import gui
     except ImportError:
-        raise Tres0rError("Die grafische Oberfläche braucht PySide6: pip install 'tres0r[gui]'") from None
+        raise Tres0rError("Die grafische Oberfläche braucht PySide6: pip install 'tres0r-crypt[gui]'") from None
     return gui.run(args.folder)
 
 
@@ -1122,7 +1122,7 @@ def cmd_tui(args: argparse.Namespace, ui: Ui) -> int:
     try:
         from . import tui
     except ImportError:
-        raise Tres0rError("Die Textoberfläche braucht Textual: pip install 'tres0r[tui]'") from None
+        raise Tres0rError("Die Textoberfläche braucht Textual: pip install 'tres0r-crypt[tui]'") from None
     tui.run(args.folder)
     return EXIT_OK
 
@@ -1571,11 +1571,11 @@ def build_parser() -> argparse.ArgumentParser:
     _level_option(p, "stark", "Stufe des Schutzes (Standard stark).")
     p.set_defaults(func=cmd_keygen)
 
-    p = sub.add_parser("gui", parents=[common], help="grafische Oberfläche starten (Extra tres0r[gui])")
+    p = sub.add_parser("gui", parents=[common], help="grafische Oberfläche starten (Extra tres0r-crypt[gui])")
     p.add_argument("folder", nargs="?", metavar="ORDNER", help="Startordner (Standard: Home)")
     p.set_defaults(func=cmd_gui)
 
-    p = sub.add_parser("tui", parents=[common], help="Textoberfläche starten (Extra tres0r[tui])")
+    p = sub.add_parser("tui", parents=[common], help="Textoberfläche starten (Extra tres0r-crypt[tui])")
     p.add_argument("folder", nargs="?", metavar="ORDNER", help="Startordner (Standard: aktueller Ordner)")
     p.set_defaults(func=cmd_tui)
 

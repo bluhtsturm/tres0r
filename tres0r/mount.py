@@ -2,7 +2,7 @@
 
 ``ContainerFS`` ist die eigentliche Logik und ohne FUSE testbar: Baum aus dem
 Inhaltsverzeichnis, Attribute, Lesen beliebiger Bereiche. ``mount()`` hängt sie
-über fusepy ein (Linux mit libfuse2, macOS mit macFUSE; Extra ``tres0r[mount]``).
+über fusepy ein (Linux mit libfuse2, macOS mit macFUSE; Extra ``tres0r-crypt[mount]``).
 
 Lesen: Jede geöffnete Datei hat einen eigenen Dekodier-Datenstrom ab ihrem
 Einstiegspunkt (Abschnitt 8 in FORMAT.md). Fortlaufendes Lesen (cat, cp,
@@ -250,7 +250,7 @@ def mount(container: str | os.PathLike[str], mountpoint: str | os.PathLike[str],
         from fuse import FUSE, FuseOSError, Operations
     except (ImportError, OSError) as e:
         raise Tres0rError(f"Einhängen braucht fusepy und libfuse/macFUSE ({e}). "
-                          "Installieren: pip install 'tres0r[mount]' und z. B. apt install libfuse2t64") from None
+                          "Installieren: pip install 'tres0r-crypt[mount]' und z. B. apt install libfuse2t64") from None
     if not Path(mountpoint).is_dir():
         raise Tres0rError(f"Einhängepunkt {mountpoint} ist kein Ordner.")
     fs = ContainerFS(container, credentials)

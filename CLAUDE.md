@@ -9,7 +9,8 @@ was getestet ist, was nicht, und Funde offen benennen.
 Verschlüsselte Container für Dateien/Ordner/Datenströme: Argon2id + ChaCha20-Poly1305
 (STREAM, 64-KiB-Chunks), bis zu 16 Keyslots, Ed25519-Signaturen, tar mit
 Inhaltsverzeichnis, optional zstd. CLI, TUI (Textual), GUI (PySide6). Stand:
-1.0.0 (`pyproject.toml`), Lizenz MIT.
+1.0.1 (`pyproject.toml`), Lizenz MIT. Paketname auf PyPI: `tres0r-crypt` (`tres0r`
+lehnt PyPI als zu ähnlich zu `tresor` ab) – Import und Befehl bleiben `tres0r`.
 
 ## Aufbau
 

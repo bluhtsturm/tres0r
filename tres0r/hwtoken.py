@@ -6,7 +6,7 @@ gespeicherten Credential und einem Salt; der Token liefert
 ``HMAC-SHA256(geheimes Zufallsgeheimnis des Credentials, Salt)`` – 32 Byte, die
 den Token nie im Klartext verlassen, ohne ihn nicht berechenbar sind und nur mit
 Berührung herausgegeben werden. Die Kryptografie auf dem Weg (Schlüsselaustausch,
-verschlüsselte Salts) erledigt python-fido2 (Extra ``tres0r[fido2]``).
+verschlüsselte Salts) erledigt python-fido2 (Extra ``tres0r-crypt[fido2]``).
 
 User-Verification bleibt "discouraged": Es zählt die Berührung, die Token-PIN wird
 nur abgefragt, wenn der Token sie selbst verlangt. hmac-secret liefert mit und ohne
@@ -33,7 +33,7 @@ def _library():
         from fido2.ctap2.extensions import HmacSecretExtension
         from fido2.utils import websafe_decode
     except ImportError:
-        raise Tres0rError("FIDO2 braucht python-fido2: pip install 'tres0r[fido2]'") from None
+        raise Tres0rError("FIDO2 braucht python-fido2: pip install 'tres0r-crypt[fido2]'") from None
     return webauthn, ClientError, DefaultClientDataCollector, Fido2Client, UserInteraction, HmacSecretExtension, \
         websafe_decode
 
@@ -43,7 +43,7 @@ def devices() -> list:
     try:
         from fido2.hid import CtapHidDevice
     except ImportError:
-        raise Tres0rError("FIDO2 braucht python-fido2: pip install 'tres0r[fido2]'") from None
+        raise Tres0rError("FIDO2 braucht python-fido2: pip install 'tres0r-crypt[fido2]'") from None
     return list(CtapHidDevice.list_devices())
 
 

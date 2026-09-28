@@ -55,5 +55,5 @@ Jeder Fund bekommt einen Regressionstest.
 1. Version in `pyproject.toml` und `tres0r/__init__.py`, CHANGELOG, `python -m tres0r.docgen`.
 2. `git tag v1.0.0 && git push origin v1.0.0` – `release.yml` baut, legt eine
    GitHub-Release an und lädt nach PyPI hoch (dafür einmalig auf PyPI einen
-   „Trusted Publisher“ für dieses Repository, `release.yml` und die Umgebung
-   `pypi` anlegen).
+   „Trusted Publisher“ für das Projekt `tres0r-crypt`, dieses Repository,
+   `release.yml` und die Umgebung `pypi` anlegen).

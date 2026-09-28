@@ -231,7 +231,7 @@ def test_cli_without_textual(monkeypatch, capsys):
     from tres0r.cli import main
 
     assert main(["tui"]) == 1
-    assert "tres0r[tui]" in capsys.readouterr().err
+    assert "tres0r-crypt[tui]" in capsys.readouterr().err
 
 
 def test_hostile_names_are_shown_literally(tmp_path):

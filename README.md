@@ -29,11 +29,20 @@ Container und eingebautem Passphrasen-Generator (pwgen) samt Have-I-Been-Pwned-P
 
 ## Installation
 
+Von PyPI – dort heißt das Paket `tres0r-crypt`, weil PyPI `tres0r` als zu ähnlich zum
+bestehenden Projekt `tresor` ablehnt. Import (`import tres0r`) und Befehl (`tres0r`)
+bleiben gleich:
+
+```bash
+pipx install "tres0r-crypt[zstd]"
+pipx install "tres0r-crypt[zstd,tui,gui]"   # mit Oberflächen
+```
+
 Direkt von GitHub:
 
 ```bash
-pipx install "tres0r[zstd] @ git+https://github.com/bluhtsturm/tres0r"
-pipx install "tres0r[zstd,tui,gui] @ git+https://github.com/bluhtsturm/tres0r"   # mit Oberflächen
+pipx install "tres0r-crypt[zstd] @ git+https://github.com/bluhtsturm/tres0r"
+pipx install "tres0r-crypt[zstd,tui,gui] @ git+https://github.com/bluhtsturm/tres0r"   # mit Oberflächen
 ```
 
 Aus einem Checkout:
@@ -219,7 +228,7 @@ zweiten Faktor, `keys add-password --new-keyfile` legt weitere solche Slots an.
 ### Zweiter Faktor: FIDO2-Token
 
 ```bash
-pip install 'tres0r[fido2]'
+pip install 'tres0r-crypt[fido2]'
 tres0r fido2                                         # angeschlossene Tokens anzeigen
 tres0r pack Tresor/ --fido2 --shares 2/3             # Passwort + Token, dazu Notfall-Anteile
 tres0r unpack Tresor.tres0r --fido2                  # Passwort eingeben, dann Token berühren
@@ -360,7 +369,7 @@ tres0r mount Backup.tres0r ~/tresor --verify --signer tres0r-sig-…
 ```
 
 Dateien direkt im Dateimanager ansehen, ohne alles zu entpacken. Braucht
-`pip install 'tres0r[mount]'` und libfuse2 (`apt install libfuse2t64`) bzw.
+`pip install 'tres0r-crypt[mount]'` und libfuse2 (`apt install libfuse2t64`) bzw.
 macFUSE. Jeder gelesene Chunk ist authentifiziert; fortlaufendes Lesen ist schnell,
 Sprünge zurück beginnen am Dateianfang neu. Dateirechte sind im
 Inhaltsverzeichnis nicht gespeichert – Dateien erscheinen als 0444. Die Signatur
