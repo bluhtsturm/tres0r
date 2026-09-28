@@ -1,6 +1,6 @@
 # Changelog
 
-## Unveröffentlicht
+## 1.0.0 – erste stabile Version
 
 ### Behoben (Befunde der ersten GitHub-CI)
 

@@ -1,3 +1,6 @@
+import re
+from pathlib import Path
+
 import pytest
 
 from tres0r.cli import main
@@ -36,6 +39,16 @@ def test_pack_info_list_unpack(tmp_path, sample_tree, pwfile, capsys):
     dest = tmp_path / "ziel"
     assert main(["unpack", str(out), "-o", str(dest), "--password-file", pwfile]) == 0
     assert (dest / "einzeln.txt").read_text(encoding="utf-8") == "einzelne Datei"
+
+
+def test_version_matches_pyproject(capsys):
+    """Beim Versionssprung müssen pyproject.toml und tres0r.__version__ zusammen geändert
+    werden – der Release-Workflow prüft nur den Tag gegen pyproject.toml."""
+    pyproject = (Path(__file__).resolve().parent.parent / "pyproject.toml").read_text(encoding="utf-8")
+    version = re.search(r'^version = "([^"]+)"$', pyproject, re.MULTILINE).group(1)
+    with pytest.raises(SystemExit) as stop:
+        main(["--version"])
+    assert stop.value.code == 0 and capsys.readouterr().out.strip() == f"tres0r {version}"
 
 
 def test_wrong_password_exit_code(tmp_path, sample_tree, pwfile, capsys):

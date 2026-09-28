@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "tres0r"
-version = "1.0.0rc7"
+version = "1.0.0"
 description = "Dateien, Ordner und Datenströme verschlüsseln – Argon2id + ChaCha20-Poly1305, mehrere Schlüssel, Signaturen, Anhängen, Einhängen"
 readme = "README.md"
 license = "MIT"
@@ -14,7 +14,7 @@ dependencies = ["cryptography>=44"]
 authors = [{ name = "Julian (bluhtsturm)" }]
 keywords = ["encryption", "verschlüsselung", "argon2", "chacha20-poly1305", "backup", "container", "fido2"]
 classifiers = [
-    "Development Status :: 4 - Beta",
+    "Development Status :: 5 - Production/Stable",
     "Environment :: Console",
     "Environment :: X11 Applications :: Qt",
     "Intended Audience :: End Users/Desktop",
