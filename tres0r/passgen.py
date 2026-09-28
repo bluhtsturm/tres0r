@@ -154,6 +154,33 @@ def generate_passphrase(
     return Secret(value, "passphrase", bits)
 
 
+def _display_lines(secret: Secret, width: int) -> list[str]:
+    """Vorschlag zum Abschreiben in Zeilen von höchstens ``width`` Zeichen (intern, für GUI
+    und TUI – lange Vorschläge passen in keine Zeile). Passphrasen brechen nur zwischen
+    Wörtern um, und das Trennzeichen beginnt dann die nächste Zeile: Eine Zeile, die auf
+    "-" endet, liest sich wie eine Silbentrennung (Fund per Bildschirmfoto:
+    "besagen-⏎westseite"). Passwörter kommen in gleich großen Stücken – die Vorschläge
+    bestehen nur aus Buchstaben und Ziffern, jede Trennstelle ist also eindeutig. Die
+    Zeilen ohne Umbruch aneinandergehängt ergeben genau das Geheimnis."""
+    value = secret.value
+    width = max(width, 1)
+    if len(value) <= width:
+        return [value]
+    if secret.kind != "passphrase":
+        rows = -(-len(value) // width)
+        size = -(-len(value) // rows)  # gleichmäßig statt eines kurzen Rests
+        return [value[i:i + size] for i in range(0, len(value), size)]
+    words = value.split(DEFAULT_SEPARATOR)
+    lines = [words[0]]
+    for word in words[1:]:
+        piece = DEFAULT_SEPARATOR + word
+        if len(lines[-1]) + len(piece) <= width:
+            lines[-1] += piece
+        else:
+            lines.append(piece)
+    return lines
+
+
 # ---------------------------------------------------------------------------
 # Prüfung
 # ---------------------------------------------------------------------------

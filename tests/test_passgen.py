@@ -185,3 +185,31 @@ def test_check_password(monkeypatch):
     monkeypatch.setattr(pwgen, "http_get", FakeHttp(""))
     good = passgen.check_password("Zug-Tanne-Kaffee-Laterne-7", online=True)
     assert good.ok and good.pwned == 0
+
+
+@pytest.mark.parametrize("words", [passgen.PASSPHRASE_MIN_WORDS, 13, passgen.PASSPHRASE_MAX_WORDS])
+@pytest.mark.parametrize("width", [20, 37, 60, 74, 100])
+def test_long_passphrase_wraps_only_between_words(words, width):
+    """GUI/TUI: Vorschläge bis 40 Wörter passen in keine Zeile. Umbrochen wird nur zwischen
+    Wörtern, und das "-" beginnt dann die nächste Zeile – eine Zeile, die auf "-" endet,
+    liest sich wie eine Silbentrennung (Fund per Bildschirmfoto: "besagen-⏎westseite")."""
+    secret = passgen.generate_passphrase(words)
+    lines = passgen._display_lines(secret, width)
+    assert "".join(lines) == secret.value  # ohne die Umbrüche genau das Geheimnis
+    assert not any(line.endswith("-") for line in lines)
+    assert all(line.startswith("-") for line in lines[1:])
+    assert all(len(line) <= width for line in lines)  # Wörter haben höchstens 19 Zeichen
+    assert [w for line in lines for w in line.split("-") if w] == secret.value.split("-")  # kein Wort zerteilt
+    if len(secret.value) <= width:
+        assert lines == [secret.value]
+
+
+@pytest.mark.parametrize("length", [passgen.PASSWORD_MIN_LEN, 20, 101, passgen.PASSWORD_MAX_LEN])
+@pytest.mark.parametrize("width", [20, 64, 74, 100])
+def test_long_password_is_split_into_even_lines(length, width):
+    secret = passgen.generate_password(length, symbols=False, exclude_ambiguous=True)
+    lines = passgen._display_lines(secret, width)
+    assert "".join(lines) == secret.value
+    assert all(len(line) <= width for line in lines)
+    assert len(lines) == -(-length // width)  # so wenige Zeilen wie möglich …
+    assert max(map(len, lines)) - min(map(len, lines)) < len(lines)  # … und gleichmäßig, kein kurzer Rest
