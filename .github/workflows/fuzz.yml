@@ -40,7 +40,7 @@ jobs:
           TRES0R_TEST_CPUS: "4"
       - name: Funde sichern
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: fuzz-funde
           path: crashes/
