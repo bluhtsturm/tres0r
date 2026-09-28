@@ -1,5 +1,8 @@
 import os
 import re
+import subprocess
+import sys
+import textwrap
 import threading
 import time
 
@@ -543,6 +546,36 @@ def test_short_suggestion_warns_like_cli(app, project):
     fields.password.setText("eigenes-passwort")  # eigenes Passwort: der Vorschlag verschwindet
     assert fields.suggestion.isHidden() and fields.suggestion_hint.isHidden()
     dialog.close()
+
+
+def test_copying_a_suggestion_survives_process_exit(tmp_path):
+    """CI-Fund: Ein in Python erzeugtes QMimeData gehörte nach dem Kopieren Python und der
+    Zwischenablage – beim Prozessende doppelt freigegeben (Segmentation fault, Exit 139),
+    obwohl alle Tests bestanden hatten. Deshalb in einem eigenen Prozess bis zum Ende.
+    Außerdem: in der Zwischenablage nur reiner Text, ohne Umbrüche (Qt legt sonst HTML,
+    Markdown und ODF mit den Umbrüchen dazu)."""
+    script = tmp_path / "kopieren.py"
+    script.write_text(textwrap.dedent("""
+        from PySide6.QtWidgets import QApplication
+        from tres0r import gui, passgen
+
+        app = QApplication([])
+        view = gui.SecretView()
+        secret = passgen.generate_passphrase(40)
+        assert len(view.show_secret(secret)) > 1
+        view.selectAll()
+        view.copy()
+        data = QApplication.clipboard().mimeData()
+        assert data.formats() == ["text/plain"], data.formats()
+        assert data.text() == secret.value
+        view.deleteLater()  # Ansicht weg, Zwischenablage bleibt – wie nach dem Dialog
+        app.processEvents()
+        assert QApplication.clipboard().text() == secret.value
+        print("fertig")
+    """), encoding="utf-8")
+    result = subprocess.run([sys.executable, str(script)], capture_output=True, text=True, timeout=120,
+                            env={**os.environ, "QT_QPA_PLATFORM": "offscreen"})
+    assert result.returncode == 0 and "fertig" in result.stdout, (result.returncode, result.stderr[-2000:])
 
 
 def test_new_password_in_key_management_is_checked_too(app, tmp_path, project, hibp):

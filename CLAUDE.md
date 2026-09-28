@@ -91,6 +91,10 @@ mit eigenem Index, Prüfung auf hängende Threads nach jedem Test),
   bekommen im Formular die Höhe ihrer *schmalen* Wunschbreite → Höhe nach dem Layout
   selbst setzen; vor `sizeHint()` des Fensters die innere Ebene zuerst `activate()`,
   sonst ist die Wunschhöhe veraltet (Dialog zu niedrig, Knöpfe verdecken Inhalt).
+  Objekte, die Qt übernimmt (etwa `QMimeData` aus `createMimeDataFromSelection`), nie in
+  Python erzeugen, sondern das von `super()` anpassen – sonst Doppelfreigabe beim
+  Prozessende: Segmentation fault *nach* bestandenen Tests. Deshalb bei pytest den
+  Exit-Code prüfen, nicht nur die letzte Zeile (`| tail` verdeckt ihn).
 * **Tests mit Import-Sperren:** `from . import x` prüft zuerst das Paket-Attribut, dann
   `sys.modules` – beides sperren. Dateinamen können kein `/` enthalten (Markup-Tests
   mit öffnenden Tags).
