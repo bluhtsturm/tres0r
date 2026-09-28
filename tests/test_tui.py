@@ -1,5 +1,7 @@
 import asyncio
 import os
+import threading
+import time
 
 import pytest
 
@@ -329,6 +331,74 @@ def test_pin_dialog_cancel_aborts_cleanly(project, tmp_path, monkeypatch):
         assert "PIN-Eingabe abgebrochen" in outcome
     run(scenario, tmp_path)
     assert not (tmp_path / "Projekt.tres0r").exists()
+
+
+def run_detached(scenario, start, timeout=30.0):
+    """``run`` in einem eigenen Thread: Endet die TUI nicht (ein Arbeitsthread läuft nach dem
+    Beenden weiter), scheitert der Test nach ``timeout``, statt die Sitzung zu blockieren."""
+    errors = []
+
+    def target():
+        try:
+            run(scenario, start)
+        except BaseException as exc:  # an den Test weiterreichen
+            errors.append(exc)
+    thread = threading.Thread(target=target, name="tui-test", daemon=True)
+    thread.start()
+    thread.join(timeout)
+    assert not thread.is_alive(), "Die TUI endet nicht – ein Arbeitsthread läuft nach dem Beenden weiter"
+    if errors:
+        raise errors[0]
+
+
+def test_quit_with_open_pin_dialog_does_not_hang(project, tmp_path, monkeypatch):
+    """Beenden bei offenem PIN-Fenster: Der Arbeitsthread wartete ohne Zeitlimit auf die
+    Antwort, der Prozess endete nie (CI: Windows-Job hing sechs Stunden)."""
+    pytest.importorskip("fido2")
+    from soft_token import SoftToken
+
+    from tres0r import hwtoken
+
+    monkeypatch.setattr(hwtoken, "devices", lambda: [SoftToken(pin="4711")])
+
+    async def scenario(app, pilot):
+        app.select(project)
+        await pilot.press("p")
+        for field in ("#password", "#confirm"):
+            app.screen.query_one(field, Input).value = PASSWORD
+        app.screen.query_one("#fido2").value = True
+        await click(app, pilot, "#start")
+        await until(pilot, lambda: isinstance(app.screen, tui.PinScreen))
+        await pilot.press("ctrl+q")
+    run_detached(scenario, tmp_path)
+    assert [p.name for p in tmp_path.iterdir()] == ["Projekt"]  # weder Container noch Teildatei
+
+
+def test_quit_during_task_cancels_it(project, tmp_path, monkeypatch):
+    """Beenden während einer Aufgabe: Sie lief unsichtbar bis zum Ende weiter und hielt so
+    lange das Prozessende auf. Jetzt wird sie abgebrochen wie mit „Abbrechen“."""
+    stopped = []
+
+    def endless(*args, progress, **kwargs):
+        try:
+            while True:
+                progress.cancel.check()
+                time.sleep(0.01)
+        except Cancelled:
+            stopped.append(True)
+            raise
+    monkeypatch.setattr(container, "create", endless)
+
+    async def scenario(app, pilot):
+        app.select(project)
+        await pilot.press("p")
+        for field in ("#password", "#confirm"):
+            app.screen.query_one(field, Input).value = PASSWORD
+        await click(app, pilot, "#start")
+        await until(pilot, lambda: isinstance(app.screen, tui.ProgressScreen))
+        await pilot.press("ctrl+q")
+    run_detached(scenario, tmp_path)
+    assert stopped == [True]
 
 
 async def unlock(app, pilot, password=PASSWORD):

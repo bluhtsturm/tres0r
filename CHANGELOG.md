@@ -26,6 +26,14 @@
   Position eines Widgets – vor dessen Layout ist das (0, 0), der Klick ging dann still
   ins Leere. Alle TUI-Tests klicken jetzt erst nach dem Layout und prüfen den Treffer;
   feste Pausen sind durch Warten auf den Bildschirmwechsel ersetzt.
+* **TUI endete nicht, wenn sie bei offenem PIN-Fenster beendet wurde** (FIDO2): Der
+  Arbeitsthread wartete ohne Zeitlimit auf die PIN, und Python wartet beim Beenden auf
+  solche Threads – der Prozess hing für immer. Aufgefallen in der CI: Nach einem
+  gescheiterten TUI-Test hing ein Windows-Job sechs Stunden, bis GitHub ihn abbrach.
+  Das Warten endet jetzt, sobald Textual den Worker abbricht. Ebenso lief eine Aufgabe
+  nach dem Beenden unsichtbar bis zu ihrem Ende weiter (und hielt so lange das
+  Prozessende auf); sie wird jetzt abgebrochen wie mit „Abbrechen“. Die CI-Jobs haben
+  zusätzlich ein Zeitlimit von 20 Minuten.
 
 ### Behoben (Code-Durchsicht)
 

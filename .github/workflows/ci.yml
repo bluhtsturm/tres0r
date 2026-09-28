@@ -16,6 +16,9 @@ jobs:
   linux:
     name: Linux · Python ${{ matrix.python }}
     runs-on: ubuntu-latest
+    # Hängt ein Job (etwa ein Thread, der das Prozessende aufhält), bricht GitHub sonst erst
+    # nach 6 Stunden ab; normal dauern alle Jobs höchstens wenige Minuten.
+    timeout-minutes: 20
     strategy:
       fail-fast: false
       matrix:
@@ -53,6 +56,7 @@ jobs:
   minimal:
     name: Minimalinstallation (nur cryptography)
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-python@v7
@@ -64,6 +68,7 @@ jobs:
   package:
     name: Paket bauen und aus dem Quellpaket testen
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-python@v7
@@ -84,6 +89,7 @@ jobs:
   portability:
     name: Erprobung · ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
     continue-on-error: true  # nie auf diesen Systemen getestet – Befunde ansehen, CI nicht rot färben
     strategy:
       fail-fast: false
