@@ -33,6 +33,10 @@ Format, Python-API und Kommandozeile sind unverändert.
 * Die Windows- und macOS-Jobs sind jetzt verpflichtend – ein Fehler dort färbt
   die CI rot (vorher `continue-on-error`, zur Erprobung). Sie heißen jetzt
   „Windows · Python 3.12“ und „macOS · Python 3.12“.
+* TUI-Tests warten jetzt, bis ein neu geöffnetes Fenster fertig aufgebaut ist. Auf dem
+  langsameren Windows-Runner fand ein Test sonst gelegentlich den Text der Rückfrage
+  noch nicht (kein Fehler im Programm). Mit künstlich verzögertem Fensteraufbau
+  scheiterten vorher 7 von 23 TUI-Tests, jetzt keiner.
 
 ## 1.0.1 – auf PyPI als `tres0r-crypt`
 
