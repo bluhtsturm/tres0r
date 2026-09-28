@@ -78,6 +78,15 @@ async def showing(app, pilot, screen_type, timeout=30.0) -> None:
     await until(pilot, lambda: isinstance(app.screen, screen_type) and app.screen.is_mounted, timeout)
 
 
+async def shows_text(app, pilot, screen_type, selector: str, needle: str, timeout=30.0) -> None:
+    """Warten, bis ``screen_type`` oben liegt und ``selector`` ``needle`` zeigt. Den Rückruf
+    eines geschlossenen Fensters reiht Textual per ``call_next`` ein – der Bildschirm darunter
+    liegt also schon oben, bevor der Rückruf den Text setzt (macOS-CI: „Stärke: in Ordnung“
+    statt „abgebrochen“). Nur auf den Bildschirm zu warten reicht deshalb nicht."""
+    await until(pilot, lambda: isinstance(app.screen, screen_type) and app.screen.is_mounted
+                and needle in text(app, selector), timeout)
+
+
 async def click(app, pilot, selector: str) -> None:
     """Klicken, sobald das Widget eingehängt UND ausgelegt ist, und prüfen, dass der Klick
     trifft. Pilot klickt auf ``widget.region.offset`` – vor dem Layout ist das (0, 0), der
@@ -530,8 +539,7 @@ def test_pwned_password_asks_and_stays_on_pack_screen(project, tmp_path, hibp):
         await showing(app, pilot, tui.ConfirmScreen)
         assert "1.234-mal in bekannten Datenlecks" in question(app) and "Trotzdem" in question(app)
         await click(app, pilot, "#no")
-        await showing(app, pilot, tui.PackScreen)
-        assert "1.234-mal" in text(app, "#strength")
+        await shows_text(app, pilot, tui.PackScreen, "#strength", "1.234-mal")
         assert app.screen.query_one("#password", Input).value == PASSWORD  # Eingaben bleiben
         await click(app, pilot, "#suggest-password")
         password = app.screen.query_one("#password", Input).value
@@ -619,8 +627,7 @@ def test_leak_check_can_be_cancelled(project, tmp_path, hibp):
         await click(app, pilot, "#start")
         await showing(app, pilot, tui.LeakCheckScreen)
         await pilot.press("escape")
-        await showing(app, pilot, tui.PackScreen, timeout=5)
-        assert "abgebrochen" in text(app, "#strength")
+        await shows_text(app, pilot, tui.PackScreen, "#strength", "abgebrochen", timeout=5)
     run(scenario, tmp_path)
     assert [p.name for p in tmp_path.iterdir()] == ["Projekt"]
 
@@ -673,6 +680,8 @@ def test_key_management(project, tmp_path):
         app.screen.query_one("#path", Input).value = str(saved)
         await click(app, pilot, "#ok")
         await showing(app, pilot, tui.SecretsScreen)  # statt fester Pause
+        # gespeichert wird im eingereihten Rückruf des Pfadfensters – erst danach schließen
+        await until(pilot, lambda: (saved / "geheimnis-1.txt").exists())
         await click(app, pilot, "#close")
         # Anteile 2/2
         await until(pilot, lambda: app.screen is keys_screen)
@@ -763,7 +772,7 @@ def test_append_diff_and_search(project, tmp_path):
         await click(app, pilot, "#ok")
         await unlock(app, pilot)
         assert "Segment 1 angehängt" in await finish_progress(app, pilot)
-        assert "angehängten Segmenten" in text(app, "#details")
+        await shows_text(app, pilot, tui.MainScreen, "#details", "angehängten Segmenten")
         # Vergleich mit dem gleichnamigen Ordner (vorgeschlagen)
         await pilot.press("d")
         assert app.screen.query_one("#path", Input).value == str(project)

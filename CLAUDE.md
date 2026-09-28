@@ -86,6 +86,9 @@ mit eigenem Index, Prüfung auf hängende Threads nach jedem Test),
 * **Textual:** Klicks ~0,2 s nach einem Klick auf denselben Knopf werden ignoriert
   (Tests: pausieren); versteckte Eingabefelder fangen Fokus/Tasten → `disabled`;
   `Screen` hat eigene Attribute (`task` …) – eigene Namen eindeutig wählen.
+  Tests: Ein Fenster liegt oben, bevor `compose` lief (`showing` wartet auf
+  `is_mounted`); den Rückruf eines geschlossenen Fensters reiht `dismiss` per `call_next`
+  ein – auf dessen Wirkung warten (`shows_text`), nicht nur auf den Bildschirm darunter.
 * **Qt:** `QLabel` deutet Text als HTML → `setTextFormat(Qt.PlainText)`;
   `adjustSize()` vergrößert sichtbare Dialoge nicht zuverlässig. Umbrechende Labels
   bekommen im Formular die Höhe ihrer *schmalen* Wunschbreite → Höhe nach dem Layout
