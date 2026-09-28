@@ -45,6 +45,18 @@ async def until(pilot, condition, timeout=30.0):
     raise AssertionError("Zeitüberschreitung in der Oberfläche")
 
 
+async def click(app, pilot, selector: str) -> None:
+    """Klicken, sobald das Widget eingehängt UND ausgelegt ist, und prüfen, dass der Klick
+    trifft. Pilot klickt auf ``widget.region.offset`` – vor dem Layout ist das (0, 0), der
+    Klick geht dann stillschweigend ins Leere (Windows-CI: langsamer Aufbau, "#unlock"
+    fehlte bzw. "OK" im Speichern-Dialog wirkte nicht)."""
+    def ready() -> bool:
+        found = app.screen.query(selector)
+        return bool(found) and found.first().region.area > 0
+    await until(pilot, ready)
+    assert await pilot.click(selector), f"Klick auf {selector} hat das Ziel verfehlt"
+
+
 def text(app, selector) -> str:
     widget = app.screen.query_one(selector)
     return str(widget.render()) if isinstance(widget, (Label, Static)) else str(widget.value)
@@ -57,7 +69,7 @@ async def finish_progress(app, pilot) -> str:
     await until(pilot, lambda: isinstance(app.screen, tui.ProgressScreen) and app.screen.is_finished)
     outcome = text(app, "#outcome")
     await pilot.pause(CLICK_PAUSE)
-    await pilot.click("#cancel")  # jetzt "Schließen"
+    await click(app, pilot, "#cancel")  # jetzt "Schließen"
     await pilot.pause()
     return outcome
 
@@ -70,11 +82,11 @@ def test_pack_with_password(project, tmp_path):
         assert isinstance(app.screen, tui.PackScreen)
         app.screen.query_one("#password", Input).value = PASSWORD
         app.screen.query_one("#confirm", Input).value = PASSWORD + "x"
-        await pilot.click("#start")
+        await click(app, pilot, "#start")
         assert isinstance(app.screen, tui.PackScreen)  # abweichende Wiederholung: nichts passiert
         app.screen.query_one("#confirm", Input).value = PASSWORD
         await pilot.pause(CLICK_PAUSE)
-        await pilot.click("#start")
+        await click(app, pilot, "#start")
         outcome = await finish_progress(app, pilot)
         assert "3 Einträge" in outcome or "Einträge" in outcome
         await until(pilot, lambda: not isinstance(app.screen, tui.PackScreen))
@@ -89,13 +101,13 @@ def test_suggested_passphrase_is_the_real_one(project, tmp_path):
     async def scenario(app, pilot):
         app.select(project)
         await pilot.press("p")
-        await pilot.click("#suggest")
+        await click(app, pilot, "#suggest")
         password = app.screen.query_one("#password", Input).value
         assert password == app.screen.query_one("#confirm", Input).value
         assert "***" not in password and "Secret" not in password and len(password) > 20
         assert password in text(app, "#strength")  # angezeigt, damit man sie notieren kann
         shown["phrase"] = password
-        await pilot.click("#start")
+        await click(app, pilot, "#start")
         await finish_progress(app, pilot)
     run(scenario, tmp_path)
     assert container.verify(tmp_path / "Projekt.tres0r", shown["phrase"]).files == 2
@@ -112,7 +124,7 @@ def test_open_browse_and_extract(project, tmp_path):
         await pilot.press("o")
         assert isinstance(app.screen, tui.UnlockScreen)
         app.screen.query_one("#password", Input).value = PASSWORD
-        await pilot.click("#unlock")
+        await click(app, pilot, "#unlock")
         await finish_progress(app, pilot)
         await until(pilot, lambda: isinstance(app.screen, tui.BrowseScreen))
         tree = app.screen.query_one("#contents", Tree)
@@ -121,7 +133,7 @@ def test_open_browse_and_extract(project, tmp_path):
         await pilot.press("a")
         assert isinstance(app.screen, tui.PathScreen)
         app.screen.query_one("#path", Input).value = str(dest)
-        await pilot.click("#ok")
+        await click(app, pilot, "#ok")
         outcome = await finish_progress(app, pilot)
         assert "entpackt" in outcome
     run(scenario, tmp_path)
@@ -152,7 +164,7 @@ def test_extract_selection_with_glob_characters_in_name(tmp_path):
         await pilot.press("e")
         await until(pilot, lambda: isinstance(app.screen, tui.PathScreen))
         app.screen.query_one("#path", Input).value = str(dest)
-        await pilot.click("#ok")
+        await click(app, pilot, "#ok")
         assert "1 Einträge" in await finish_progress(app, pilot)
     run(scenario, tmp_path)
     assert os.listdir(dest / "Fotos") == ["Urlaub [2019].jpg"]
@@ -165,7 +177,7 @@ def test_wrong_password_shows_error(project, tmp_path):
         app.select(out)
         await pilot.press("o")
         app.screen.query_one("#password", Input).value = "falsch"
-        await pilot.click("#unlock")
+        await click(app, pilot, "#unlock")
         outcome = await finish_progress(app, pilot)
         assert "Falsches Passwort" in outcome
         assert not isinstance(app.screen, tui.BrowseScreen)
@@ -192,11 +204,11 @@ def test_cancel_during_pack(project, tmp_path, monkeypatch):
         await pilot.press("p")
         for field in ("#password", "#confirm"):
             app.screen.query_one(field, Input).value = PASSWORD
-        await pilot.click("#start")
+        await click(app, pilot, "#start")
         await until(pilot, lambda: started.get("yes"))
         await pilot.pause(0.3)
         assert "Verschlüssele" in text(app, "#phase")
-        await pilot.click("#cancel")
+        await click(app, pilot, "#cancel")
         outcome = await finish_progress(app, pilot)
         assert "Abgebrochen" in outcome
         assert isinstance(app.screen, tui.PackScreen)  # zurück im Formular, nichts gepackt
@@ -235,7 +247,7 @@ def test_hostile_names_are_shown_literally(tmp_path):
         assert "[link=x]c.tres0r" in text(app, "#details")
         await pilot.press("o")
         app.screen.query_one("#password", Input).value = PASSWORD
-        await pilot.click("#unlock")
+        await click(app, pilot, "#unlock")
         await finish_progress(app, pilot)
         await until(pilot, lambda: isinstance(app.screen, tui.BrowseScreen))
         tree = app.screen.query_one("#contents", Tree)
@@ -261,7 +273,7 @@ def test_main_shortcuts_only_on_main_screen(project, tmp_path):
         app.select(project)
         await pilot.press("p")
         assert isinstance(app.screen, tui.PackScreen)
-        await pilot.click("#suggest")  # Fokus auf einem Knopf, nicht in einem Eingabefeld
+        await click(app, pilot, "#suggest")  # Fokus auf einem Knopf, nicht in einem Eingabefeld
         await pilot.press("p", "o", "v")
         assert isinstance(app.screen, tui.PackScreen) and len(app.screen_stack) == 3  # Standard, Haupt, Packen
     run(scenario, tmp_path)
@@ -284,10 +296,10 @@ def test_pack_with_pin_token(project, tmp_path, monkeypatch):
         for field in ("#password", "#confirm"):
             app.screen.query_one(field, Input).value = PASSWORD
         app.screen.query_one("#fido2").value = True
-        await pilot.click("#start")
+        await click(app, pilot, "#start")
         await until(pilot, lambda: isinstance(app.screen, tui.PinScreen))  # aus dem Arbeitsthread geöffnet
         app.screen.query_one("#pin", Input).value = "4711"
-        await pilot.click("#ok")
+        await click(app, pilot, "#ok")
         outcome = await finish_progress(app, pilot)
         assert "Einträge" in outcome
     run(scenario, tmp_path)
@@ -310,7 +322,7 @@ def test_pin_dialog_cancel_aborts_cleanly(project, tmp_path, monkeypatch):
         for field in ("#password", "#confirm"):
             app.screen.query_one(field, Input).value = PASSWORD
         app.screen.query_one("#fido2").value = True
-        await pilot.click("#start")
+        await click(app, pilot, "#start")
         await until(pilot, lambda: isinstance(app.screen, tui.PinScreen))
         await pilot.press("escape")
         outcome = await finish_progress(app, pilot)
@@ -320,11 +332,9 @@ def test_pin_dialog_cancel_aborts_cleanly(project, tmp_path, monkeypatch):
 
 
 async def unlock(app, pilot, password=PASSWORD):
-    # Knöpfe in verschachtelten Containern werden später eingehängt als das Passwortfeld
-    # (Windows-CI: "#unlock" fehlte noch) – auf das vollständige Fenster warten.
-    await until(pilot, lambda: isinstance(app.screen, tui.UnlockScreen) and bool(app.screen.query("#unlock")))
+    await until(pilot, lambda: isinstance(app.screen, tui.UnlockScreen))
     app.screen.query_one("#password", Input).value = password
-    await pilot.click("#unlock")
+    await click(app, pilot, "#unlock")
 
 
 def test_key_management(project, tmp_path):
@@ -342,7 +352,7 @@ def test_key_management(project, tmp_path):
         await pilot.press("n")
         for field in ("#password", "#confirm"):
             app.screen.query_one(field, Input).value = "zweites-passwort"
-        await pilot.click("#ok")
+        await click(app, pilot, "#ok")
         assert "Slot 1" in await finish_progress(app, pilot)
         # Wiederherstellungsphrase: Geheimnis-Fenster, als Datei speichern
         await pilot.press("w")
@@ -350,16 +360,17 @@ def test_key_management(project, tmp_path):
         await until(pilot, lambda: isinstance(app.screen, tui.SecretsScreen))
         phrase = app.screen.items[0][1]
         assert phrase in text(app, "#secrets")
-        await pilot.click("#save")
+        await click(app, pilot, "#save")
+        await until(pilot, lambda: isinstance(app.screen, tui.PathScreen))
         app.screen.query_one("#path", Input).value = str(saved)
-        await pilot.click("#ok")
-        await pilot.pause(0.3)
-        await pilot.click("#close")
+        await click(app, pilot, "#ok")
+        await until(pilot, lambda: isinstance(app.screen, tui.SecretsScreen))  # statt fester Pause
+        await click(app, pilot, "#close")
         # Anteile 2/2
         await until(pilot, lambda: app.screen is keys_screen)
         await pilot.press("s")
         app.screen.query_one("#text", Input).value = "2/2"
-        await pilot.click("#ok")
+        await click(app, pilot, "#ok")
         await finish_progress(app, pilot)
         await until(pilot, lambda: isinstance(app.screen, tui.SecretsScreen))
         shares = [value for _, value in app.screen.items]
@@ -368,20 +379,20 @@ def test_key_management(project, tmp_path):
         for share in shares:  # angezeigt in Gruppen – genau so abgetippt muss es wieder passen
             grouped = tui.SecretsScreen.readable(share)
             assert grouped in shown and _shamir.parse_share(grouped) == _shamir.parse_share(share)
-        await pilot.click("#close")
+        await click(app, pilot, "#close")
         await until(pilot, lambda: app.screen is keys_screen)
         assert keys_screen.query_one("#slots").row_count == 4
         # Passwort ändern, danach Slot 1 entfernen (mit Rückfrage)
         await pilot.press("c")
         for field in ("#password", "#confirm"):
             app.screen.query_one(field, Input).value = "neues-passwort"
-        await pilot.click("#ok")
+        await click(app, pilot, "#ok")
         assert "geändert" in await finish_progress(app, pilot)
         table = keys_screen.query_one("#slots")
         table.move_cursor(row=1)
         await pilot.press("x")
         await until(pilot, lambda: isinstance(app.screen, tui.ConfirmScreen))
-        await pilot.click("#yes")
+        await click(app, pilot, "#yes")
         assert "Entfernt" in await finish_progress(app, pilot)
         await until(pilot, lambda: app.screen is keys_screen)
         state["shares"], state["phrase"] = shares, phrase
@@ -411,14 +422,14 @@ def test_append_diff_and_search(project, tmp_path):
         app.select(out)
         await pilot.press("a")
         app.screen.query_one("#path", Input).value = str(extra)
-        await pilot.click("#ok")
+        await click(app, pilot, "#ok")
         await unlock(app, pilot)
         assert "Segment 1 angehängt" in await finish_progress(app, pilot)
         assert "angehängten Segmenten" in text(app, "#details")
         # Vergleich mit dem gleichnamigen Ordner (vorgeschlagen)
         await pilot.press("d")
         assert app.screen.query_one("#path", Input).value == str(project)
-        await pilot.click("#ok")
+        await click(app, pilot, "#ok")
         await unlock(app, pilot)
         await finish_progress(app, pilot)
         await until(pilot, lambda: isinstance(app.screen, tui.DiffScreen))

@@ -22,7 +22,10 @@
   `core.autocrlf` die Prüfsumme von `pwgen.py`). Die übrigen Windows-Funde lagen in
   den Tests: Pfadtrenner im Vergleichs-Helfer, Textdateien mit Locale-Kodierung bzw.
   CRLF, `was?.txt` ist unter Windows nicht anlegbar, keine Unix-Rechte, der
-  WSL-Platzhalter `bash.exe` und ein Textual-Zeitproblem (Knopf noch nicht eingehängt).
+  WSL-Platzhalter `bash.exe` und Textual-Zeitprobleme: `pilot.click` klickt auf die
+  Position eines Widgets – vor dessen Layout ist das (0, 0), der Klick ging dann still
+  ins Leere. Alle TUI-Tests klicken jetzt erst nach dem Layout und prüfen den Treffer;
+  feste Pausen sind durch Warten auf den Bildschirmwechsel ersetzt.
 
 ### Behoben (Code-Durchsicht)
 
