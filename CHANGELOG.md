@@ -17,6 +17,15 @@
   `^` und `` ` `` auf deutschen Tastaturen Tottasten sind und der Vorschlag
   abgeschrieben wird.
 
+### Textoberfläche
+
+* **Dasselbe in der TUI:** Selbst gewählte Passwörter (Packen, weiteres und geändertes
+  Passwort) werden beim Bestätigen gegen bekannte Datenlecks geprüft – abschaltbar per
+  Schalter, mit derselben Rückfrage; bei „Nein“ bleibt das Fenster mit allen Eingaben
+  offen. Ein eigenes Fenster zeigt die laufende Abfrage, schließt sich selbst und lässt
+  sich mit Esc sofort abbrechen; auch Beenden wartet nicht auf eine hängende Anfrage.
+  Beim Packen gibt es zusätzlich „Passwort vorschlagen“.
+
 ### CI
 
 * Die Windows- und macOS-Jobs sind jetzt verpflichtend – ein Fehler dort färbt

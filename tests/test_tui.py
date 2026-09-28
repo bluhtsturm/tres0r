@@ -7,10 +7,10 @@ import pytest
 
 pytest.importorskip("textual")
 
-from textual.widgets import Input, Label, Static, Tree  # noqa: E402
+from textual.widgets import Input, Label, Static, Switch, Tree  # noqa: E402
 
-from tres0r import container, tui  # noqa: E402
-from tres0r.errors import Cancelled  # noqa: E402
+from tres0r import container, passgen, tui  # noqa: E402
+from tres0r.errors import Cancelled, HibpUnavailable, WrongPassword  # noqa: E402
 from tres0r.kdf import LEVELS  # noqa: E402
 
 from conftest import FAST, PASSWORD  # noqa: E402
@@ -20,6 +20,28 @@ from conftest import FAST, PASSWORD  # noqa: E402
 def fast_levels(monkeypatch):
     for name in LEVELS:
         monkeypatch.setitem(LEVELS, name, FAST)
+
+
+@pytest.fixture(autouse=True)
+def hibp(monkeypatch):
+    """Kein Netz in den Tests: HIBP-Abfragen landen hier. ``pwned`` ordnet Passwörtern
+    Treffer zu, ``fail`` lässt die Abfrage scheitern wie ohne Netz, ``block`` hält sie an."""
+    fake = {"pwned": {}, "fail": None, "block": None, "asked": []}
+
+    def count(password):
+        fake["asked"].append(password)
+        if fake["block"] is not None:
+            fake["block"].wait(30)
+        if fake["fail"] is not None:
+            raise fake["fail"]
+        return fake["pwned"].get(password, 0)
+    monkeypatch.setattr(passgen, "hibp_count", count)
+    yield fake
+    if fake["block"] is not None:  # liegengebliebene Anfrage-Threads beenden
+        fake["block"].set()
+        for thread in threading.enumerate():
+            if thread.name == "tres0r-hibp":
+                thread.join(5)
 
 
 @pytest.fixture
@@ -399,6 +421,139 @@ def test_quit_during_task_cancels_it(project, tmp_path, monkeypatch):
         await pilot.press("ctrl+q")
     run_detached(scenario, tmp_path)
     assert stopped == [True]
+
+
+def question(app) -> str:
+    return str(app.screen.query_one(Label).render())
+
+
+async def fill_pack(app, pilot, project, password=PASSWORD):
+    app.select(project)
+    await pilot.press("p")
+    for field in ("#password", "#confirm"):
+        app.screen.query_one(field, Input).value = password
+
+
+def test_pwned_password_asks_and_stays_on_pack_screen(project, tmp_path, hibp):
+    """Wie in der GUI (Befund aus dem Test unter Debian 13): Die TUI prüfte Passwörter nur
+    offline und schlug nur Passphrasen vor. Jetzt HIBP wie in der CLI – bei „Nein“ bleibt
+    der Packbildschirm mit allen Eingaben – und auf Wunsch ein zufälliges Passwort."""
+    hibp["pwned"][PASSWORD] = 1234
+    chosen = {}
+
+    async def scenario(app, pilot):
+        await fill_pack(app, pilot, project)
+        await click(app, pilot, "#start")
+        await until(pilot, lambda: isinstance(app.screen, tui.ConfirmScreen))
+        assert "1.234-mal in bekannten Datenlecks" in question(app) and "Trotzdem" in question(app)
+        await click(app, pilot, "#no")
+        await until(pilot, lambda: isinstance(app.screen, tui.PackScreen))
+        assert "1.234-mal" in text(app, "#strength")
+        assert app.screen.query_one("#password", Input).value == PASSWORD  # Eingaben bleiben
+        await click(app, pilot, "#suggest-password")
+        password = app.screen.query_one("#password", Input).value
+        # ohne Sonderzeichen (Tottasten ^ und `) und ohne Verwechselbares – leicht abzuschreiben
+        assert len(password) == passgen.DEFAULT_PASSWORD_LEN and password.isalnum()
+        assert not set(password) & set("Il1O0") and password in text(app, "#strength")
+        chosen["password"] = password
+        await pilot.pause(CLICK_PAUSE)
+        await click(app, pilot, "#start")
+        await finish_progress(app, pilot)
+    run(scenario, tmp_path)
+    assert hibp["asked"] == [PASSWORD]  # der Vorschlag ist zufällig – keine Abfrage
+    assert container.verify(tmp_path / "Projekt.tres0r", chosen["password"]).files == 2
+
+
+def test_unreachable_hibp_is_mentioned(project, tmp_path, hibp):
+    hibp["fail"] = HibpUnavailable("HIBP nicht erreichbar: kein Netz")
+
+    async def scenario(app, pilot):
+        await fill_pack(app, pilot, project)
+        await click(app, pilot, "#start")
+        await until(pilot, lambda: isinstance(app.screen, tui.ConfirmScreen))
+        assert "kein Netz" in question(app) and "übersprungen" in question(app)
+        await click(app, pilot, "#yes")
+        await finish_progress(app, pilot)
+    run(scenario, tmp_path)
+    assert container.verify(tmp_path / "Projekt.tres0r", PASSWORD).files == 2
+
+
+def test_leak_check_switched_off_weak_password_still_asks(project, tmp_path, hibp):
+    async def scenario(app, pilot):
+        await fill_pack(app, pilot, project, "kurz")
+        app.screen.query_one("#online", Switch).value = False  # wie --offline in der CLI
+        await click(app, pilot, "#start")
+        await until(pilot, lambda: isinstance(app.screen, tui.ConfirmScreen))
+        assert "kürzer als 12 Zeichen" in question(app)
+        await click(app, pilot, "#no")
+        await until(pilot, lambda: isinstance(app.screen, tui.PackScreen))
+        for field in ("#password", "#confirm"):
+            app.screen.query_one(field, Input).value = PASSWORD
+        await pilot.pause(CLICK_PAUSE)
+        await click(app, pilot, "#start")
+        await finish_progress(app, pilot)
+    run(scenario, tmp_path)
+    assert hibp["asked"] == []  # nichts ging ins Netz
+    assert container.verify(tmp_path / "Projekt.tres0r", PASSWORD).files == 2
+
+
+def test_new_password_in_key_management_is_checked(project, tmp_path, hibp):
+    out = container.create([project], tmp_path / "k.tres0r", PASSWORD, FAST).path
+    hibp["pwned"]["zweites-passwort"] = 7
+
+    async def scenario(app, pilot):
+        app.select(out)
+        await pilot.press("k")
+        await unlock(app, pilot)
+        await finish_progress(app, pilot)
+        await until(pilot, lambda: isinstance(app.screen, tui.KeysScreen))
+        await pilot.press("n")
+        for field in ("#password", "#confirm"):
+            app.screen.query_one(field, Input).value = "zweites-passwort"
+        await click(app, pilot, "#ok")
+        await until(pilot, lambda: isinstance(app.screen, tui.ConfirmScreen))
+        assert "7-mal" in question(app)
+        await click(app, pilot, "#no")
+        await until(pilot, lambda: isinstance(app.screen, tui.NewPasswordScreen))  # bleibt offen
+        for field in ("#password", "#confirm"):
+            app.screen.query_one(field, Input).value = "drittes-passwort"
+        await pilot.pause(CLICK_PAUSE)
+        await click(app, pilot, "#ok")
+        assert "Slot 1" in await finish_progress(app, pilot)
+    run(scenario, tmp_path)
+    assert hibp["asked"] == ["zweites-passwort", "drittes-passwort"]
+    container.check_credentials(out, "drittes-passwort")
+    with pytest.raises(WrongPassword):
+        container.check_credentials(out, "zweites-passwort")
+
+
+def test_leak_check_can_be_cancelled(project, tmp_path, hibp):
+    """Die HIBP-Anfrage wartet bei schlechtem Netz bis zu 20 s – Esc muss sofort zurückführen."""
+    hibp["block"] = threading.Event()
+
+    async def scenario(app, pilot):
+        await fill_pack(app, pilot, project)
+        await click(app, pilot, "#start")
+        await until(pilot, lambda: isinstance(app.screen, tui.LeakCheckScreen))
+        await pilot.press("escape")
+        await until(pilot, lambda: isinstance(app.screen, tui.PackScreen), timeout=5)
+        assert "abgebrochen" in text(app, "#strength")
+    run(scenario, tmp_path)
+    assert [p.name for p in tmp_path.iterdir()] == ["Projekt"]
+
+
+def test_quit_during_leak_check_does_not_hang(project, tmp_path, hibp):
+    """Beenden, während die HIBP-Anfrage hängt: Der Prozess darf nicht auf sie warten
+    (Worker-Threads halten das Prozessende auf – siehe PIN-Fenster)."""
+    hibp["block"] = threading.Event()
+
+    async def scenario(app, pilot):
+        await fill_pack(app, pilot, project)
+        await click(app, pilot, "#start")
+        await until(pilot, lambda: isinstance(app.screen, tui.LeakCheckScreen))
+        await pilot.press("ctrl+q")
+    run_detached(scenario, tmp_path)
+    assert [p.name for p in tmp_path.iterdir()] == ["Projekt"]
 
 
 async def unlock(app, pilot, password=PASSWORD):
