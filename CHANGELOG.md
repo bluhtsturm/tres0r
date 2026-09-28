@@ -1,6 +1,8 @@
 # Changelog
 
-## Unveröffentlicht
+## 1.2.0 – Länge der Vorschläge wählbar
+
+Format, Python-API und Kommandozeile sind unverändert.
 
 ### Grafische und Textoberfläche (Wunsch aus dem Handtest von 1.1.0)
 
