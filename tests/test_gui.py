@@ -6,7 +6,7 @@ import pytest
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 pytest.importorskip("PySide6.QtWidgets")
 
-from PySide6.QtCore import Qt  # noqa: E402
+from PySide6.QtCore import QPoint, Qt  # noqa: E402
 from PySide6.QtWidgets import QApplication, QDialog  # noqa: E402
 
 from tres0r import container, gui, shamir  # noqa: E402
@@ -49,7 +49,9 @@ class Driver:
         window.confirm = lambda text: self.handlers["confirm"](text)
         window.ask_text = lambda question, default="": self.handlers["ask_text"](question)
         window.choose_directory = lambda title: self.handlers["directory"]()
-        window.choose_source = lambda title: self.handlers["source"]()
+        self.starts = []  # vorgeschlagene Startordner der Auswahldialoge
+        window.choose_source = lambda title, start=None: self.starts.append(start) or self.handlers["source"]()
+        window.choose_sources = lambda title, start=None: self.starts.append(start) or self.handlers["sources"]()
         window.request_pin = lambda: self.handlers["pin"]()
 
     def run_dialog(self, dialog):
@@ -128,7 +130,12 @@ def test_suggested_passphrase_is_real_and_fully_shown(app, tmp_path, project):
         assert "***" not in phrase and len(phrase) > 20
         field = dialog.passwords.suggestion  # einzeilig, markierbar – kein mehrdeutiger Umbruch
         assert field.text() == phrase and field.isReadOnly() and not field.isHidden()
-        assert field.width() >= field.fontMetrics().horizontalAdvance(phrase)  # sichtbar breit genug
+        assert field.width() >= field.fontMetrics().horizontalAdvance(phrase)  # breit genug …
+        # … und ganz im Dialog (Fund per Bildschirmfoto: das Feld ragte 48 px über den Rand,
+        # das Ende der Phrase war abgeschnitten; der Hinweis darüber war zu niedrig)
+        assert field.mapTo(dialog, QPoint(field.width(), 0)).x() <= dialog.width()
+        hint = dialog.passwords.suggestion_hint
+        assert hint.height() >= hint.heightForWidth(hint.width())
         shown["phrase"] = phrase
         return True
     driver.handlers["PackDialog"] = pack_dialog
@@ -258,7 +265,7 @@ def test_append_and_diff(app, tmp_path, project):
     window, driver = make(app, tmp_path)
     window.select(out)
     driver.handlers["UnlockDialog"] = unlock_with()
-    driver.handlers["source"] = lambda: extra
+    driver.handlers["sources"] = lambda: [extra]
     window.append()
     assert any("Segment 1" in i for i in driver.infos) and "angehängten Segmenten" in window.details.text()
     rows = []
@@ -270,6 +277,148 @@ def test_append_and_diff(app, tmp_path, project):
     driver.handlers["source"] = lambda: project
     window.diff()
     assert ("geändert", "Projekt/notiz.txt") in rows and ("entfernt", "Nachtrag/neu.txt") in rows
+    assert driver.starts[-1] == project  # vorgeschlagen: der gleichnamige Ordner (wie in der TUI)
+    # Anhängen geht auch mit einzelnen Dateien (früher nur Ordner; der Hinweis "in das
+    # Fenster ziehen" packte in Wahrheit einen neuen Container)
+    (tmp_path / "a.txt").write_text("a")
+    (tmp_path / "b.txt").write_text("b")
+    driver.handlers["sources"] = lambda: [tmp_path / "a.txt", tmp_path / "b.txt"]
+    window.append()
+    assert any("Segment 2" in i and "2 Einträge" in i for i in driver.infos)
+    assert {"a.txt", "b.txt"} <= {e.name for e in container.list_contents(out, PASSWORD)}
+    # Inhaltsfenster zeigt die Segment-Spalte, weil es angehängte Segmente gibt
+    window.open()
+    assert not window.windows[-1].tree.isColumnHidden(3)
+    window.windows[-1].close()
+
+
+def test_keys_for_raw_container_and_level_of_new_password(app, tmp_path):
+    """Fund: "Schlüssel …" entsperrte über list_contents – das lehnt Rohdaten-Container
+    (encrypt, geschützte Identitätsdateien) ab. Und "+ Passwort" legte pauschal Stufe
+    "normal" an, auch wenn der Container stärker geschützt war."""
+    import io
+
+    from tres0r.kdf import KdfParams
+
+    strong = KdfParams(memory_kib=16 * 1024, iterations=2, lanes=1)
+    raw = tmp_path / "roh.tres0r"
+    with container.atomic_output(raw) as out:
+        container.encrypt_stream(io.BytesIO(b"daten"), out, PASSWORD, strong)
+    window, driver = make(app, tmp_path)
+    window.select(raw)
+    driver.handlers["UnlockDialog"] = unlock_with()
+
+    def new_password(dialog):
+        fill_passwords(dialog.passwords, "zweites-passwort")
+        dialog._accept()
+        return dialog.result() == QDialog.Accepted
+    driver.handlers["NewPasswordDialog"] = new_password
+    driver.handlers["KeysDialog"] = lambda dialog: dialog.add_password() or True
+    window.keys()
+    assert not driver.errors, driver.errors
+    slots = container.inspect(raw).slots
+    assert len(slots) == 2 and slots[1].description == slots[0].description  # gleiche Stufe
+    container.check_credentials(raw, "zweites-passwort")
+
+
+def test_errors_are_readable(app, tmp_path):
+    """OSError (z. B. keine Schreibrechte) ist erwartbar: Meldung mit Pfad statt
+    "Unerwarteter Fehler: PermissionError(13, …)"."""
+    assert gui.describe_error(PermissionError(13, "Keine Berechtigung", "/ziel")) == "Keine Berechtigung: /ziel"
+    assert gui.describe_error(OSError("kaputt")) == "kaputt"
+    assert gui.describe_error(ValueError("x")).startswith("Unerwarteter Fehler")
+    window, driver = make(app, tmp_path)
+
+    def job(monitor):
+        raise PermissionError(13, "Keine Berechtigung", str(tmp_path / "ziel"))
+    assert window.run_task("Test", job) is None
+    assert driver.errors == [f"Keine Berechtigung: {tmp_path / 'ziel'}"]
+
+
+def test_pack_dialog_checks_output_before_starting(app, tmp_path, project):
+    dialog = gui.PackDialog(None, [project])
+    fill_passwords(dialog.passwords, PASSWORD)
+    for text, expected in (("", "Bitte eine Zieldatei angeben."),
+                           (str(tmp_path), "ist ein Ordner"),
+                           (str(tmp_path / "fehlt" / "x.tres0r"), "existiert nicht"),
+                           (str(project / "notiz.txt"), "existiert bereits")):
+        dialog.output.setText(text)
+        dialog._accept()
+        assert dialog.result() != QDialog.Accepted and expected in dialog.passwords.strength.text(), text
+    dialog.output.setText(str(tmp_path / "gut.tres0r"))
+    dialog._accept()
+    assert dialog.result() == QDialog.Accepted
+
+
+def test_secrets_saved_note_and_busy_progress(app, tmp_path):
+    from tres0r.progress import ProgressEvent
+
+    dialog = gui.SecretsDialog(None, "Phrase", [("Phrase", "eins-zwei-drei")])
+    assert dialog.save(tmp_path / "ablage") == tmp_path / "ablage"
+    assert str(tmp_path / "ablage") in dialog.saved_note.text()
+    progress = gui.ProgressDialog(None, "Test", lambda monitor: None)
+    progress._show(ProgressEvent("packen", 50, 100))
+    assert progress.bar.maximum() == 1000 and progress.bar.value() == 500
+    progress._show(ProgressEvent("schlüssel", 0, None))  # neue Phase ohne Gesamtgröße
+    assert progress.bar.maximum() == 0  # "beschäftigt" statt eines stehengebliebenen Balkens
+
+
+def test_suggestion_disappears_when_own_password_is_typed(app, project):
+    """Bildschirmfoto: nach eigenem Passwort stand "Vorschlag … bitte notieren" samt Phrase
+    weiter da – als würde die Phrase verwendet."""
+    dialog = gui.PackDialog(None, [project])
+    dialog.show()
+    dialog.passwords.suggest()
+    assert dialog.passwords.suggestion.isVisible() and dialog.passwords.suggestion_hint.text()
+    fill_passwords(dialog.passwords, "ganz-anderes-passwort")
+    assert not dialog.passwords.suggestion.isVisible() and not dialog.passwords.suggestion_hint.text()
+    dialog.close()
+
+
+def test_phrase_wraps_only_between_words_and_still_unlocks():
+    """Projektregel: Phrasen nie nach "-" umbrechen (Bildschirmfoto: "besagen-⏎westseite")."""
+    from tres0r import keys
+
+    phrase = keys.generate_recovery().value
+    shown = gui.SecretsDialog.readable(phrase)
+    assert "-" not in shown and len(shown.split(" ")) == keys.RECOVERY_WORDS
+    assert keys.canonical_secret(shown) == keys.canonical_secret(phrase)
+    share = shamir.split(bytes(32), 2, 2)[0].text()
+    assert shamir.parse_share(gui.SecretsDialog.readable(share)) == shamir.parse_share(share)
+
+
+def test_tables_without_second_numbering(app, tmp_path, project):
+    out = container.create([project], tmp_path / "t.tres0r", PASSWORD, FAST).path
+    window, driver = make(app, tmp_path)
+    dialog = gui.KeysDialog(window, out, Credentials(passwords=[PASSWORD]))
+    assert dialog.table.columnCount() == 2 and not dialog.table.verticalHeader().isVisible()
+    assert dialog.table.item(0, 1).text().startswith("Passwort")
+    (project / "notiz.txt").write_text("anders")
+    diff = gui.DiffDialog(window, "x", container.diff(out, [project], PASSWORD))
+    assert not diff.table.verticalHeader().isVisible()
+    browse = gui.BrowseWindow(window, out, Credentials(passwords=[PASSWORD]), container.list_contents(out, PASSWORD))
+    assert browse.items["Projekt/notiz.txt"].toolTip(0) == "Projekt/notiz.txt"
+    assert browse.tree.header().sectionResizeMode(2) == gui.QHeaderView.ResizeToContents  # Datum nie gekürzt
+    assert browse.tree.isColumnHidden(3)  # keine Segmente
+    for widget in (dialog, diff, browse):
+        widget.close()
+
+
+def test_raw_container_offers_only_what_works(app, tmp_path):
+    """Bildschirmfoto: bei Rohdaten-Containern (encrypt) waren Öffnen/Anhängen/Vergleichen
+    aktiv – alle scheitern zwangsläufig; ein Doppelklick führte in eine Fehlermeldung."""
+    import io
+
+    raw = tmp_path / "daten.tres0r"
+    with container.atomic_output(raw) as out:
+        container.encrypt_stream(io.BytesIO(b"daten"), out, PASSWORD, FAST)
+    window, driver = make(app, tmp_path)
+    window.select(raw)
+    enabled = {name for name, action in window.actions_by_name.items() if action.isEnabled()}
+    assert enabled == {"verify", "keys"} and "Datenstrom" in window.details.text()
+    window._double_clicked(window.model.index(str(raw)))
+    window.dropped([raw])  # weder öffnen noch erneut einpacken
+    assert not driver.errors and not window.windows
 
 
 def test_fido2_pin_from_worker_thread(app, tmp_path, project, monkeypatch):

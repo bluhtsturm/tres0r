@@ -43,6 +43,15 @@ def _exact(name: str) -> str:
     return "".join(f"[{ch}]" if ch in "*?[" else ch for ch in name)
 
 
+def _describe_error(error: BaseException) -> str:
+    """Meldetext; ``OSError`` ist erwartbar (Rechte, voller Datenträger) – mit Pfad."""
+    if isinstance(error, Tres0rError):
+        return str(error)
+    if isinstance(error, OSError):
+        return f"{error.strerror or error}" + (f": {error.filename}" if error.filename else "")
+    return f"Unerwarteter Fehler: {error!r}"
+
+
 def _duration(seconds: float | None) -> str:
     if seconds is None:
         return ""
@@ -116,8 +125,8 @@ class ProgressScreen(ModalScreen):
             outcome.update(escape(self._summary(self.outcome)))
         else:
             self.failure = event.worker.error
-            message = "Abgebrochen – nichts wurde verändert." if isinstance(self.failure, Cancelled) else (
-                str(self.failure) if isinstance(self.failure, Tres0rError) else f"Unerwarteter Fehler: {self.failure!r}")
+            message = ("Abgebrochen – nichts wurde verändert." if isinstance(self.failure, Cancelled)
+                       else _describe_error(self.failure))
             outcome.update(f"[b red]{escape(message)}[/]")
         self.is_finished = True
 
@@ -470,7 +479,9 @@ class KeysScreen(Screen):
             if new is None:
                 return
             self._run("Passwort hinzufügen", lambda monitor: container.add_keys(
-                self.path, self.credentials, password=new["password"], params=LEVELS["normal"],
+                self.path, self.credentials, password=new["password"],
+                # gleiche Stufe wie das vorhandene Passwort – ein schwächerer Slot senkt den Schutz
+                params=self.info.kdf or LEVELS["normal"],
                 keyfile=new["keyfile"], fido2=new["fido2"], progress=monitor),
                 lambda added: f"Hinzugefügt: Slot {', '.join(map(str, added))}")
         self.app.push_screen(NewPasswordScreen("Weiteres Passwort"), chosen)
@@ -946,13 +957,13 @@ class MainScreen(Screen):
         path = self.info.path
 
         def unlocked(credentials: keys.Credentials) -> None:
-            # Erst prüfen, ob die Zugangsdaten passen (billig über den Index), dann verwalten
-            def listed(entries) -> None:
-                if entries is not None:
+            # Erst prüfen, ob die Zugangsdaten passen (nur der Header – auch bei Rohdaten), dann verwalten
+            def checked(slot) -> None:
+                if slot is not None:
                     self.app.push_screen(KeysScreen(path, credentials))
             self.app.push_screen(ProgressScreen(
-                "Entsperren", lambda monitor: container.list_contents(path, credentials, progress=monitor),
-                lambda entries: "Entsperrt."), listed)
+                "Entsperren", lambda monitor: container.check_credentials(path, credentials, progress=monitor),
+                lambda slot: f"Entsperrt über Slot {slot.index} ({slot.description})."), checked)
         self._with_credentials(unlocked)
 
     def action_append(self) -> None:

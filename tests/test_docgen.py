@@ -26,6 +26,20 @@ def test_every_command_is_documented_and_completable():
     assert page.isascii()
 
 
+def test_manpage_prose_mentions_only_existing_options():
+    """Fund: Die Beschreibung versprach "-q und -v" für alle Befehle – die gibt es nicht."""
+    import re
+
+    parser = build_parser()
+    known = {flag for action in parser._actions for flag in action.option_strings}
+    for _, sub, _ in docgen._commands(parser):
+        known |= {flag for action in sub._actions for flag in action.option_strings}
+    page = docgen.manpage()
+    prose = page[page.index(".SH BESCHREIBUNG"):page.index(".SH BEFEHLE")].replace("\\-", "-")
+    mentioned = set(re.findall(r"(?<![\w-])--?[A-Za-z][\w-]*", prose))
+    assert mentioned and mentioned <= known, mentioned - known
+
+
 @pytest.mark.skipif(shutil.which("groff") is None, reason="groff fehlt")
 def test_manpage_renders_without_warnings():
     run = subprocess.run(["groff", "-man", "-Tutf8", "-ww", "-z"], input=docgen.manpage().encode(),

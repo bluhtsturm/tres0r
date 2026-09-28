@@ -945,6 +945,21 @@ def inspect(container: str | os.PathLike[str]) -> ContainerInfo:
     )
 
 
+def check_credentials(
+    container: str | os.PathLike[str], credentials: Unlock, *, progress: Progress | None = None
+) -> SlotInfo:
+    """Zugangsdaten prüfen, ohne Inhalt zu lesen – z. B. bevor eine Oberfläche nach einem
+    neuen Passwort fragt. Entsperrt nur den Header (Passwort-Slots: Argon2id) und prüft
+    bei v2 die Header-MAC; passt nichts, folgt ``WrongPassword``. Gibt den Slot zurück,
+    der gepasst hat. Funktioniert für alle Container, auch für Rohdatenströme."""
+    path = Path(container)
+    f, _ = volumes.open_read(path)
+    with f:
+        header = read_header(f)
+    _, used = _unlock_tracked(header, credentials, progress)
+    return inspect(path).slots[used]
+
+
 def _entry_from_index(e: payload.IndexEntry) -> Entry:
     return Entry(name=e.name, size=e.size, kind=payload.KINDS[e.kind], mtime=e.mtime, sha256=e.sha256)
 

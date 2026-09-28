@@ -68,7 +68,7 @@ Diese Namen bedeuten in allen Funktionen dasselbe:
 * `threads` – Threads für SHA-256 und zstd; `None` = automatisch (Kerne, max. 8), `1` = aus.
 * `split` – Teilgröße in Byte für `NAME.001 …`; `None` = eine Datei.
 * `rename` – Kollidierende oder hier ungültige Namen umbenennen statt abbrechen.
-* `only` – Muster: nur passende Einträge (samt Inhalt passender Ordner).
+* `only` – fnmatch-Muster: nur passende Einträge (samt Inhalt passender Ordner). `[`, `*` und `?` sind Sonderzeichen – einen Namen wörtlich treffen z. B. `[[]` statt `[`.
 * `total` – Erwartete Größe in Byte – für Fortschritt und Restzeit.
 * `passphrase` – Passphrase einer geschützten Schlüsseldatei.
 
@@ -264,6 +264,13 @@ Bei v2 wird genau der Passwort-Slot ersetzt, der zum alten Passwort passt;
 ohne ``params`` behält er seine Stufe.
 
 ``old_password``: Zugangsdaten zum Entsperren (wie ``credentials``); ``new_password``: das neue Passwort. Ein zweiter Faktor (Keyfile, FIDO2) bleibt.
+
+### `check_credentials(container, credentials, *, progress=None)`
+
+Zugangsdaten prüfen, ohne Inhalt zu lesen – z. B. bevor eine Oberfläche nach einem
+neuen Passwort fragt. Entsperrt nur den Header (Passwort-Slots: Argon2id) und prüft
+bei v2 die Header-MAC; passt nichts, folgt ``WrongPassword``. Gibt den Slot zurück,
+der gepasst hat. Funktioniert für alle Container, auch für Rohdatenströme.
 
 ### `Plan` (Datenklasse)
 

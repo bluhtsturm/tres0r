@@ -12,7 +12,7 @@ tres0r \- Dateien, Ordner und Datenstr\[u00F6]me verschl\[u00FC]sseln
 .RB [ \-\-version | \-h ]
 .SH BESCHREIBUNG
 tres0r verschl\[u00FC]sselt Dateien, Ordner und Datenstr\[u00F6]me in einen Container (Argon2id, ChaCha20\-Poly1305, optional zstd). Container k\[u00F6]nnen mehrere Schl\[u00FC]ssel haben (Passw\[u00F6]rter, Wiederherstellungsphrase, Empf\[u00E4]nger, Keyfile, FIDO2\-Token, Schwellwert\-Anteile), signiert, aufgeteilt, eingeh\[u00E4]ngt und erweitert werden. Das Format ist in FORMAT.md beschrieben.
-Alle Befehle kennen \-\-json (maschinenlesbare Ausgabe auf stdout), \-q und \-v.
+Alle Befehle kennen \-\-json: stdout enth\[u00E4]lt dann genau ein JSON\-Objekt, Status\- und Fortschrittsmeldungen entfallen.
 .SH BEFEHLE
 .SS "pack"
 Dateien/Ordner verschl\[u00FC]sseln
