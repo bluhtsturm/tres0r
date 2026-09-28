@@ -286,6 +286,68 @@ class TextScreen(ModalScreen):
         self.dismiss(None)
 
 
+class LeakCheckScreen(ModalScreen):
+    """Passwort gegen bekannte Datenlecks prüfen (HIBP); Ergebnis: ``PasswordCheck`` oder None
+    (abgebrochen). Schließt sich selbst – die Anfrage dauert meist unter einer Sekunde."""
+
+    DEFAULT_CSS = """
+    LeakCheckScreen { align: center middle; }
+    #box { width: 66; height: auto; border: round $accent; padding: 1 2; background: $surface; }
+    """
+    BINDINGS = [Binding("escape", "abort", "Abbrechen")]
+
+    def __init__(self, password: str) -> None:
+        super().__init__()
+        self._candidate = password
+        self._stop = CancelToken()
+
+    def compose(self) -> ComposeResult:
+        with Vertical(id="box"):
+            yield Label("Prüfe das Passwort gegen bekannte Datenlecks (HIBP) …\n"
+                        "[dim]Nur die ersten 5 Zeichen des SHA-1-Hashes verlassen den Rechner.[/]")
+            yield Button("Abbrechen", id="abort")
+
+    def on_mount(self) -> None:
+        self.run_worker(self._ask, thread=True, exit_on_error=False, name="hibp")
+
+    def _ask(self) -> passgen.PasswordCheck | None:
+        # Die Anfrage selbst läuft in einem Daemon-Thread: Sie wartet bei schlechtem Netz bis zu 20 s
+        # und ließe sich nicht unterbrechen – so endet der Worker beim Abbrechen oder Beenden sofort
+        # (Worker-Threads hielten sonst das Prozessende auf).
+        box: dict = {}
+
+        def ask() -> None:
+            try:
+                box["check"] = passgen.check_password(self._candidate, online=True)
+            except BaseException as error:  # an den Worker weiterreichen
+                box["error"] = error
+        thread = threading.Thread(target=ask, name="tres0r-hibp", daemon=True)
+        thread.start()
+        while thread.is_alive():
+            if self._stop.cancelled:
+                return None
+            thread.join(0.05)
+        if "error" in box:
+            raise box["error"]
+        return box["check"]
+
+    @on(Worker.StateChanged)
+    def _finished(self, event: Worker.StateChanged) -> None:
+        if event.state == WorkerState.SUCCESS:
+            self.dismiss(event.worker.result)
+        elif event.state in (WorkerState.ERROR, WorkerState.CANCELLED):
+            if event.state == WorkerState.ERROR:
+                self.notify(escape(_describe_error(event.worker.error)), severity="error")
+            self.dismiss(None)
+
+    @on(Button.Pressed, "#abort")
+    def action_abort(self) -> None:
+        self._stop.cancel()  # der Worker endet binnen 0,05 s und schließt das Fenster mit None
+
+    def on_unmount(self) -> None:
+        self._stop.cancel()  # Oberfläche beendet: den Worker nicht warten lassen
+
+
 class ConfirmScreen(ModalScreen):
     DEFAULT_CSS = """
     ConfirmScreen { align: center middle; }
@@ -400,6 +462,9 @@ class NewPasswordScreen(ModalScreen):
                     yield Switch(id="fido2")
                     yield Label("FIDO2-Token als zweiter Faktor")
             with Horizontal():
+                yield Switch(value=True, id="online")
+                yield Label("gegen bekannte Datenlecks prüfen (HIBP, online)")
+            with Horizontal():
                 yield Button("OK", variant="primary", id="ok")
                 yield Button("Abbrechen", id="abort")
 
@@ -424,7 +489,10 @@ class NewPasswordScreen(ModalScreen):
                     return
             if use_token:
                 result["fido2"] = self.app.token_provider()
-        self.dismiss(result)
+        # „Trotzdem verwenden? – Nein“: das Fenster bleibt offen, die Eingaben auch
+        self.app.vet_password(password, online=self.query_one("#online", Switch).value,
+                              proceed=lambda: self.dismiss(result),
+                              rejected=lambda why: self.notify(escape(why), severity="warning"))
 
     @on(Button.Pressed, "#abort")
     def action_abort(self) -> None:
@@ -754,6 +822,7 @@ class PackScreen(Screen):
     def __init__(self, sources: list[Path]) -> None:
         super().__init__()
         self.sources = sources
+        self._suggested: str | None = None
 
     def compose(self) -> ComposeResult:
         first = self.sources[0]
@@ -779,8 +848,12 @@ class PackScreen(Screen):
             confirm.border_title = "Passwort wiederholen"
             yield confirm
             yield Label("", id="strength")
+            with Horizontal():  # wie die CLI (dort abschaltbar mit --offline); geprüft wird beim Packen
+                yield Switch(value=True, id="online")
+                yield Label("beim Packen gegen bekannte Datenlecks prüfen (HIBP, online)")
             with Horizontal():
                 yield Button("Passphrase vorschlagen", id="suggest")
+                yield Button("Passwort vorschlagen", id="suggest-password")
                 yield Button("Packen", variant="primary", id="start")
         yield Footer()
 
@@ -789,21 +862,29 @@ class PackScreen(Screen):
         if not event.value:
             self.query_one("#strength", Label).update("")
             return
-        if getattr(self, "_suggested", None) == event.value:
-            return  # Vorschlag: Hinweis mit der Phrase stehen lassen
+        if self._suggested == event.value:
+            return  # Vorschlag: Hinweis mit dem Geheimnis stehen lassen
         check = passgen.check_password(event.value)  # offline: Länge, Zeichenklassen, bekannte Muster
         verdict = "[green]in Ordnung[/]" if check.ok else "[yellow]" + escape("; ".join(check.warnings)) + "[/]"
         self.query_one("#strength", Label).update(f"Stärke: {verdict}")
 
     @on(Button.Pressed, "#suggest")
     def _suggest(self) -> None:
-        phrase = passgen.generate_passphrase()
-        text = phrase.value  # str(phrase) ist absichtlich geschwärzt
+        self._offer(passgen.generate_passphrase())
+
+    @on(Button.Pressed, "#suggest-password")
+    def _suggest_password(self) -> None:
+        # ohne Sonderzeichen (^ und ` sind auf deutschen Tastaturen Tottasten) und ohne
+        # Verwechselbares (0/O, 1/l/I) – der Vorschlag wird abgeschrieben; gut 110 Bit
+        self._offer(passgen.generate_password(symbols=False, exclude_ambiguous=True))
+
+    def _offer(self, secret: passgen.Secret) -> None:
+        text = secret.value  # str(secret) ist absichtlich geschwärzt
         self._suggested = text
         for field in ("#password", "#confirm"):
             self.query_one(field, Input).value = text
-        self.query_one("#strength", Label).update(  # eigene Zeile: die Phrase muss ganz lesbar sein
-            f"Vorschlag ({phrase.entropy_bits:.0f} Bit) – bitte vollständig notieren:\n[b]{escape(text)}[/]")
+        self.query_one("#strength", Label).update(  # eigene Zeile: das Geheimnis muss ganz lesbar sein
+            f"Vorschlag ({secret.entropy_bits:.0f} Bit) – bitte vollständig notieren:\n[b]{escape(text)}[/]")
 
     @on(Button.Pressed, "#start")
     def _start(self) -> None:
@@ -834,8 +915,18 @@ class PackScreen(Screen):
                 self.app.notify(escape(f"Gepackt: {result.path}"))
                 self.app.refresh_files()
 
-        self.app.push_screen(ProgressScreen(
-            "Packen", task, lambda r: f"{r.path} – {_size(r.size)}, {r.entries} Einträge"), closed)
+        def pack() -> None:
+            self.app.push_screen(ProgressScreen(
+                "Packen", task, lambda r: f"{r.path} – {_size(r.size)}, {r.entries} Einträge"), closed)
+
+        def rejected(why: str) -> None:  # „Trotzdem verwenden? – Nein“: zurück, die Eingaben bleiben
+            self.query_one("#strength", Label).update(f"[yellow]{escape(why)}[/]")
+
+        if password == self._suggested:  # unveränderter Vorschlag: zufällig, keine Prüfung nötig
+            pack()
+        else:
+            self.app.vet_password(password, online=self.query_one("#online", Switch).value,
+                                  proceed=pack, rejected=rejected)
 
     def action_back(self) -> None:
         self.app.pop_screen()
@@ -1033,6 +1124,35 @@ class Tres0rApp(App):
 
     def select(self, path: Path) -> None:
         self.main.select(path)
+
+    def vet_password(self, password: str, *, online: bool, proceed: Callable[[], None],
+                     rejected: Callable[[str], None]) -> None:
+        """Selbst gewähltes Passwort prüfen wie die CLI: Länge und Zeichenarten, dazu – wenn
+        ``online`` – der Abgleich mit bekannten Datenlecks (HIBP). Bei Schwächen oder
+        übersprungenem Abgleich nachfragen; ``proceed()``, wenn es verwendet wird, sonst
+        ``rejected(grund)`` – das aufrufende Fenster bleibt offen, die Eingaben auch."""
+        def decide(check: passgen.PasswordCheck | None) -> None:
+            if check is None:
+                rejected("Prüfung abgebrochen.")
+                return
+            problems = [f"{warning}." for warning in check.warnings]
+            if check.hibp_error:
+                problems.append(f"{check.hibp_error} – die Datenleck-Prüfung wurde übersprungen.")
+            if not problems:
+                proceed()
+                return
+
+            def answered(yes: bool) -> None:
+                if yes:
+                    proceed()
+                else:
+                    rejected(" ".join(problems))
+            self.push_screen(ConfirmScreen("Hinweise zum Passwort:\n\n" + "\n".join(f"• {p}" for p in problems)
+                                           + "\n\nTrotzdem verwenden?"), answered)
+        if online:
+            self.push_screen(LeakCheckScreen(password), decide)
+        else:
+            decide(passgen.check_password(password))
 
     def token_provider(self) -> hwtoken.TokenProvider:
         """FIDO2 für Arbeitsthreads: Hinweise als Benachrichtigung, PIN über ein Fenster."""

@@ -77,7 +77,7 @@ Format, Größe, Schlüssel-Slots, Signatur und Segmente.
 
 | Taste | Hauptansicht | im Inhaltsbaum | in der Schlüsselverwaltung |
 |---|---|---|---|
-| `p` | packen (Stufe, zstd, FIDO2, Passwort mit Stärkeanzeige oder Vorschlag) | | |
+| `p` | packen (Stufe, zstd, FIDO2, Passwort mit Stärkeanzeige und HIBP-Prüfung oder Vorschlag als Passphrase/Passwort) | | |
 | `o` | öffnen → Inhaltsbaum | | |
 | `v` | prüfen | prüfen | |
 | `a` | Datei/Ordner anhängen | alles entpacken | |
@@ -546,9 +546,9 @@ Vertragstest, der meldet, wenn sich eine genutzte Schnittstelle ändert.
 
 ## Passwort-Prüfung (HIBP)
 
-Beim Festlegen eines Passworts fragen CLI und grafische Oberfläche die
-Pwned-Passwords-API ab (abschaltbar mit `--offline` bzw. per Häkchen; die
-Textoberfläche prüft bisher nur offline). Übertragen werden nur die ersten **5 Hex-Zeichen**
+Beim Festlegen eines Passworts fragt tres0r – in CLI, Text- und grafischer Oberfläche –
+die Pwned-Passwords-API ab (abschaltbar mit `--offline` bzw. per Schalter oder
+Häkchen). Übertragen werden nur die ersten **5 Hex-Zeichen**
 des SHA-1-Hashes (k-Anonymität); mit `Add-Padding` ist auch die Antwortgröße
 unabhängig vom Präfix. Ist die API nicht erreichbar, gibt es einen Hinweis statt
 eines Abbruchs.
