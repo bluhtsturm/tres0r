@@ -1,6 +1,8 @@
 # Changelog
 
-## Unveröffentlicht
+## 1.1.0 – Datenleck-Prüfung und Passwort-Vorschläge in GUI und TUI
+
+Format, Python-API und Kommandozeile sind unverändert.
 
 ### Grafische Oberfläche (Befunde aus dem Test unter Debian 13)
 

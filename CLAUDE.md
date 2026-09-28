@@ -9,7 +9,7 @@ was getestet ist, was nicht, und Funde offen benennen.
 Verschlüsselte Container für Dateien/Ordner/Datenströme: Argon2id + ChaCha20-Poly1305
 (STREAM, 64-KiB-Chunks), bis zu 16 Keyslots, Ed25519-Signaturen, tar mit
 Inhaltsverzeichnis, optional zstd. CLI, TUI (Textual), GUI (PySide6). Stand:
-1.0.1 (`pyproject.toml`), Lizenz MIT. Paketname auf PyPI: `tres0r-crypt` (`tres0r`
+1.1.0 (`pyproject.toml`), Lizenz MIT. Paketname auf PyPI: `tres0r-crypt` (`tres0r`
 lehnt PyPI als zu ähnlich zu `tresor` ab) – Import und Befehl bleiben `tres0r`.
 
 ## Aufbau
@@ -97,8 +97,12 @@ mit eigenem Index, Prüfung auf hängende Threads nach jedem Test),
 
 ## Offen
 
-* Windows/macOS: GUI und FUSE ungetestet (die CI-Jobs dort laufen ohne diese Extras).
-* GUI auf einem echten Desktop (X11/Wayland, Themes, HiDPI, Drag & Drop, Dateidialoge).
+* Windows/macOS: GUI und FUSE nicht systematisch getestet (die CI-Jobs dort laufen ohne
+  diese Extras). Julian hat 1.0 unter Windows Server 2025 von Hand ausprobiert – lief.
+* GUI auf echten Desktops: 1.0 unter Debian 13 von Julian ausprobiert (seine Befunde →
+  1.1.0); nicht gezielt geprüft: X11/Wayland, Themes, HiDPI, Drag & Drop, Dateidialoge.
+  Die Neuerungen aus 1.1.0 (HIBP-Abfrage, Passwort-Vorschlag) in GUI und TUI sind bisher
+  nur automatisch getestet.
 * FIDO2 mit echter Hardware (YubiKey o. Ä.) inkl. PIN.
 * Gewinn des Hintergrund-Dekodierers auf Mehrkern-Rechnern messen (`verify (zstd)`).
 * Später: Post-Quanten-Empfänger (Slot-Typ 4, reserviert), paralleles Dekomprimieren

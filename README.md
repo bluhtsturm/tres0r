@@ -20,12 +20,12 @@ Container und eingebautem Passphrasen-Generator (pwgen) samt Have-I-Been-Pwned-P
   unabhängigem Referenz-Leser und Testvektoren
 * **Abhängigkeiten:** nur `cryptography`; alles Weitere als optionale Extras
 
-> **Status: 1.0.0.** Getestet unter Linux mit Python 3.10–3.14 (automatische Tests,
+> **Status: 1.1.0.** Getestet unter Linux mit Python 3.10–3.14 (automatische Tests,
 > Fuzzing, Property-Tests). Unter Windows und macOS laufen die automatischen Tests
-> (ohne GUI und FUSE) in der CI ebenfalls durch. Die GUI ist bisher nur ohne
-> Bildschirm getestet, FIDO2 nur gegen einen Software-Token, noch nicht mit echter
-> Hardware. Eine unabhängige Sicherheitsprüfung (Audit) gab es bisher nicht – siehe
-> [`SECURITY.md`](SECURITY.md).
+> (ohne GUI und FUSE) in der CI ebenfalls durch. Von Hand ausprobiert wurde Version 1.0
+> unter Debian 13 (mit GUI) und unter Windows Server 2025. FIDO2 ist nur gegen einen
+> Software-Token getestet, noch nicht mit echter Hardware. Eine unabhängige
+> Sicherheitsprüfung (Audit) gab es bisher nicht – siehe [`SECURITY.md`](SECURITY.md).
 
 ## Installation
 
@@ -674,9 +674,6 @@ wöchentlich. Mehr zum Mitmachen in [`CONTRIBUTING.md`](CONTRIBUTING.md).
   und testet damit alles hinter der Kryptografie (Blöcke, zstd, tar, Index,
   Namensschutz, `salvage`, `upgrade`) – die Angriffsfläche eines böswilligen
   Absenders, der das Passwort kennt oder einen öffentlichen Schlüssel nutzt.
-
-Die CI (`.github/workflows/tests.yml`) testet Linux, Windows und macOS mit
-Python 3.10, 3.12, 3.13 und 3.14.
 
 ## Lizenzen
 
