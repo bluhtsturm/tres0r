@@ -196,9 +196,16 @@ class SecretView(QPlainTextEdit):
         """Das Geheimnis selbst, ohne Zeilenumbrüche."""
         return self._value
 
-    def createMimeDataFromSelection(self) -> QMimeData:  # Kopieren, Ziehen: ohne Umbrüche (Qt: U+2029)
-        data = QMimeData()
-        data.setText(self.textCursor().selectedText().replace("\u2029", "").replace("\n", ""))
+    def createMimeDataFromSelection(self) -> QMimeData:  # Kopieren, Ziehen: ohne unsere Umbrüche
+        # Das Objekt muss von Qt stammen: ein in Python erzeugtes QMimeData gehörte danach Python
+        # UND der Zwischenablage und wurde beim Prozessende doppelt freigegeben (CI: Segmentation
+        # fault nach bestandenen Tests). Nur reiner Text – HTML, Markdown und ODF, die Qt dazulegt,
+        # enthielten die Umbrüche noch.
+        data = super().createMimeDataFromSelection()
+        text = data.text().replace("\n", "")  # löst zugleich Qts verzögerte Aufbereitung aus
+        for fmt in data.formats():
+            data.removeFormat(fmt)
+        data.setText(text)
         return data
 
 
