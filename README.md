@@ -646,8 +646,8 @@ python tests/api_surface.py                           # öffentliche API gegen d
 
 Die CI (`.github/workflows/ci.yml`) führt das bei jedem Push unter Python 3.10–3.14
 aus, dazu eine Minimalinstallation, den Paket-Build samt Tests aus dem Quellpaket und
-– zur Erprobung – Windows und macOS. `fuzz.yml` fuzzt wöchentlich. Mehr zum Mitmachen
-in [`CONTRIBUTING.md`](CONTRIBUTING.md).
+die Tests unter Windows und macOS (dort ohne GUI und FUSE). `fuzz.yml` fuzzt
+wöchentlich. Mehr zum Mitmachen in [`CONTRIBUTING.md`](CONTRIBUTING.md).
 
 * **Spezifikation:** [`FORMAT.md`](FORMAT.md) beschreibt das Format vollständig und
   unabhängig vom Code. `tests/reference_decoder.py` ist ein zweiter Leser, der nur

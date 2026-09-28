@@ -1,5 +1,11 @@
 # Changelog
 
+## Unveröffentlicht
+
+* **CI:** Die Windows- und macOS-Jobs sind jetzt verpflichtend – ein Fehler dort färbt
+  die CI rot (vorher `continue-on-error`, zur Erprobung). Sie heißen jetzt
+  „Windows · Python 3.12“ und „macOS · Python 3.12“.
+
 ## 1.0.1 – auf PyPI als `tres0r-crypt`
 
 Keine Änderung am Programmverhalten.

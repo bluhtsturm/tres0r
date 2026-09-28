@@ -93,8 +93,7 @@ mit eigenem Index, Prüfung auf hängende Threads nach jedem Test),
 
 ## Offen
 
-* Windows/macOS: Tests in der CI grün, Jobs aber noch `continue-on-error` – bei Bedarf
-  verpflichtend machen; GUI und FUSE dort ungetestet.
+* Windows/macOS: GUI und FUSE ungetestet (die CI-Jobs dort laufen ohne diese Extras).
 * GUI auf einem echten Desktop (X11/Wayland, Themes, HiDPI, Drag & Drop, Dateidialoge).
 * FIDO2 mit echter Hardware (YubiKey o. Ä.) inkl. PIN.
 * Gewinn des Hintergrund-Dekodierers auf Mehrkern-Rechnern messen (`verify (zstd)`).
