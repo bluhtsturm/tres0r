@@ -166,7 +166,8 @@ class ProgressDialog(QDialog):
 # Dialoge
 # ---------------------------------------------------------------------------
 class PasswordFields(QWidget):
-    """Passwort + Wiederholung mit Stärkeanzeige und optionalem Vorschlag."""
+    """Passwort + Wiederholung mit Stärkeanzeige, optionalem Vorschlag (Passphrase oder
+    Passwort) und der Wahl, ob beim Bestätigen online gegen Datenlecks geprüft wird."""
 
     def __init__(self, suggest: bool = True) -> None:
         super().__init__()
@@ -179,22 +180,39 @@ class PasswordFields(QWidget):
         form.addRow("Wiederholen", self.confirm)
         self.strength = _plain(QLabel(""))
         form.addRow("", self.strength)
+        # wie die CLI (dort abschaltbar mit --offline); geprüft wird erst beim Bestätigen
+        self.online = QCheckBox("Beim Bestätigen gegen bekannte Datenlecks prüfen (HIBP, online)")
+        self.online.setChecked(True)
+        self.online.setToolTip("Nur die ersten 5 Zeichen des SHA-1-Hashes gehen an api.pwnedpasswords.com "
+                               "(k-Anonymität) – das Passwort selbst verlässt den Rechner nicht.")
+        form.addRow("", self.online)
         # Vorschlag einzeilig: ein Umbruch nach "-" wäre beim Abschreiben mehrdeutig
+        self._suggested: str | None = None
         self.suggestion = QLineEdit()
         self.suggestion.setReadOnly(True)
         self.suggestion.setFont(QFont("monospace"))
         self.suggestion.setVisible(False)
         self.suggestion_hint = _plain(QLabel(""))
         if suggest:
-            button = QPushButton("Passphrase vorschlagen")
-            button.clicked.connect(self.suggest)
-            form.addRow("", button)
+            buttons = QWidget()
+            row = QHBoxLayout(buttons)
+            row.setContentsMargins(0, 0, 0, 0)
+            for label, kind in (("Passphrase vorschlagen", "passphrase"), ("Passwort vorschlagen", "passwort")):
+                button = QPushButton(label)
+                button.clicked.connect(lambda _checked=False, kind=kind: self.suggest(kind))
+                row.addWidget(button)
+            row.addStretch()
+            form.addRow("", buttons)
             form.addRow("", self.suggestion_hint)
             form.addRow("", self.suggestion)
         self.password.textChanged.connect(self._strength)
 
+    def is_suggestion(self) -> bool:
+        """Steht noch der unveränderte Vorschlag im Feld? Er ist zufällig – keine Prüfung nötig."""
+        return bool(self.password.text()) and self.password.text() == self._suggested
+
     def _strength(self, text: str) -> None:
-        suggested = text == getattr(self, "_suggested", None)
+        suggested = text == self._suggested
         if not suggested:  # eigenes Passwort: der Vorschlag gilt nicht mehr – nicht stehen lassen
             self.suggestion.setVisible(False)
             self.suggestion_hint.setText("")
@@ -204,21 +222,26 @@ class PasswordFields(QWidget):
         check = passgen.check_password(text)
         self.strength.setText("Stärke: in Ordnung" if check.ok else "Stärke: " + "; ".join(check.warnings))
 
-    def suggest(self) -> None:
-        phrase = passgen.generate_passphrase()
-        self._suggested = phrase.value  # str(phrase) ist absichtlich geschwärzt
-        self.password.setText(phrase.value)
-        self.confirm.setText(phrase.value)
-        self.suggestion_hint.setText(f"Vorschlag ({phrase.entropy_bits:.0f} Bit) – bitte vollständig notieren "
+    def suggest(self, kind: str = "passphrase") -> None:
+        """Zufälliges Geheimnis vorschlagen: ``"passphrase"`` (Wörter) oder ``"passwort"``
+        (20 Zeichen). Das Passwort kommt ohne Sonderzeichen und ohne Verwechselbares
+        (0/O, 1/l/I) aus – ^ und ` sind auf deutschen Tastaturen Tottasten, und beim
+        Abschreiben zählt jedes Zeichen; es hat trotzdem gut 110 Bit."""
+        secret = (passgen.generate_password(symbols=False, exclude_ambiguous=True) if kind == "passwort"
+                  else passgen.generate_passphrase())
+        self._suggested = secret.value  # str(secret) ist absichtlich geschwärzt
+        self.password.setText(secret.value)
+        self.confirm.setText(secret.value)
+        self.suggestion_hint.setText(f"Vorschlag ({secret.entropy_bits:.0f} Bit) – bitte vollständig notieren "
                                      "(markieren und kopieren möglich):")
-        self.suggestion.setText(phrase.value)
+        self.suggestion.setText(secret.value)
         self.suggestion.setVisible(True)
         self.suggestion.setCursorPosition(0)
         # ganz sichtbar, ohne Scrollen – sonst übersieht man beim Abschreiben das Ende. Das Feld
         # selbst wird sofort breit genug, ragte aber über den Dialogrand hinaus (gemessen: 48 px
         # abgeschnitten, Hinweis darüber zu niedrig) – deshalb das ganze Fenster auf seine neue
         # Wunschgröße bringen (adjustSize() vergrößert sichtbare Dialoge nicht zuverlässig).
-        self.suggestion.setMinimumWidth(self.suggestion.fontMetrics().horizontalAdvance(phrase.value) + 24)
+        self.suggestion.setMinimumWidth(self.suggestion.fontMetrics().horizontalAdvance(secret.value) + 24)
         window = self.window()
         self.layout().activate()  # zuerst die eigene Ebene – sonst ist die Wunschgröße des Dialogs veraltet
         window.layout().activate()
@@ -234,6 +257,29 @@ class PasswordFields(QWidget):
             self.strength.setText("Die Passwörter stimmen nicht überein.")
             return None
         return self.password.text()
+
+
+def _leak_check(password: str) -> Callable[[Monitor], passgen.PasswordCheck]:
+    """Aufgabe für ``run_task``: Passwort prüfen, mit Abgleich gegen bekannte Datenlecks.
+    Die Anfrage läuft in einem eigenen Thread, damit „Abbrechen“ sofort wirkt – sie selbst
+    wartet bei schlechtem Netz bis zu 20 s."""
+    def job(monitor: Monitor) -> passgen.PasswordCheck:
+        box: dict = {}
+
+        def ask() -> None:
+            try:
+                box["check"] = passgen.check_password(password, online=True)
+            except BaseException as error:  # an die Aufgabe weiterreichen
+                box["error"] = error
+        worker = threading.Thread(target=ask, name="tres0r-hibp", daemon=True)
+        worker.start()
+        while worker.is_alive():
+            monitor.cancel.check()
+            worker.join(0.05)
+        if "error" in box:
+            raise box["error"]
+        return box["check"]
+    return job
 
 
 def _path_row(placeholder: str, pick: Callable[[], str]) -> tuple[QWidget, QLineEdit]:
@@ -550,8 +596,11 @@ class KeysDialog(QDialog):
 
     def _new_password(self, title: str, second_factor: bool = True) -> dict | None:
         dialog = NewPasswordDialog(self, title, second_factor)
-        if not self.main.run_dialog(dialog):
-            return None
+        while True:  # „Trotzdem verwenden? – Nein“ führt zurück in den Dialog
+            if not self.main.run_dialog(dialog):
+                return None
+            if self.main.acceptable_password(dialog.passwords):
+                break
         keyfile = None
         if dialog.keyfile.text().strip():
             try:
@@ -788,6 +837,31 @@ class MainWindow(QMainWindow):
             return None
         return dialog.result_value
 
+    def acceptable_password(self, fields: PasswordFields) -> bool:
+        """Neues, selbst gewähltes Passwort prüfen wie die CLI: Länge und Zeichenarten, dazu –
+        wenn angehakt – der Abgleich mit bekannten Datenlecks (HIBP). Bei Schwächen oder
+        übersprungenem Abgleich nachfragen; False heißt: zurück in den Dialog. Ein unveränderter
+        Vorschlag ist zufällig und bleibt ungeprüft (auch nicht online)."""
+        if fields.is_suggestion():
+            return True
+        password = fields.password.text()
+        if fields.online.isChecked():
+            check = self.run_task("Datenleck-Prüfung (HIBP)", _leak_check(password))
+            if check is None:  # abgebrochen oder Fehler – bereits gemeldet
+                return False
+        else:
+            check = passgen.check_password(password)
+        problems = [f"{warning}." for warning in check.warnings]
+        if check.hibp_error:
+            problems.append(f"{check.hibp_error} – die Datenleck-Prüfung wurde übersprungen.")
+        if not problems:
+            return True
+        if self.confirm("Hinweise zum Passwort:\n\n" + "\n".join(f"• {p}" for p in problems)
+                        + "\n\nTrotzdem verwenden?"):
+            return True
+        fields.strength.setText(" ".join(problems))
+        return False
+
     def token_provider(self) -> hwtoken.TokenProvider:
         return hwtoken.TokenProvider(notify=self.bridge.notice.emit, pin=self.ask_pin)
 
@@ -894,8 +968,11 @@ class MainWindow(QMainWindow):
         if not sources:
             return
         dialog = PackDialog(self, sources)
-        if not self.run_dialog(dialog):
-            return
+        while True:  # „Trotzdem verwenden? – Nein“ führt zurück in den Dialog, die Eingaben bleiben
+            if not self.run_dialog(dialog):
+                return
+            if self.acceptable_password(dialog.passwords):
+                break
         password, output = dialog.passwords.value(), Path(dialog.output.text()).expanduser()
         level, compress = dialog.level.currentData(), dialog.compress.isChecked()
         fido2 = self.token_provider() if dialog.fido2.isChecked() else None

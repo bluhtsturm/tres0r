@@ -1,4 +1,6 @@
 import os
+import re
+import threading
 import time
 
 import pytest
@@ -7,11 +9,13 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 pytest.importorskip("PySide6.QtWidgets")
 
 from PySide6.QtCore import QPoint, Qt  # noqa: E402
-from PySide6.QtWidgets import QApplication, QDialog  # noqa: E402
+from PySide6.QtWidgets import QApplication, QDialog, QPushButton  # noqa: E402
 
-from tres0r import container, gui, shamir  # noqa: E402
+from tres0r import container, gui, passgen, shamir  # noqa: E402
+from tres0r.errors import Cancelled, HibpUnavailable, WrongPassword  # noqa: E402
 from tres0r.keys import Credentials  # noqa: E402
 from tres0r.kdf import LEVELS  # noqa: E402
+from tres0r.progress import CancelToken, Monitor  # noqa: E402
 
 from conftest import FAST, PASSWORD  # noqa: E402
 
@@ -25,6 +29,21 @@ def app():
 def fast_levels(monkeypatch):
     for name in LEVELS:
         monkeypatch.setitem(LEVELS, name, FAST)
+
+
+@pytest.fixture(autouse=True)
+def hibp(monkeypatch):
+    """Kein Netz in den Tests: HIBP-Abfragen landen hier. ``pwned`` ordnet Passwörtern
+    Treffer zu, ``fail`` lässt die Abfrage scheitern wie ohne Netz."""
+    fake = {"pwned": {}, "fail": None, "asked": []}
+
+    def count(password):
+        fake["asked"].append(password)
+        if fake["fail"] is not None:
+            raise fake["fail"]
+        return fake["pwned"].get(password, 0)
+    monkeypatch.setattr(passgen, "hibp_count", count)
+    return fake
 
 
 @pytest.fixture
@@ -373,6 +392,133 @@ def test_suggestion_disappears_when_own_password_is_typed(app, project):
     fill_passwords(dialog.passwords, "ganz-anderes-passwort")
     assert not dialog.passwords.suggestion.isVisible() and not dialog.passwords.suggestion_hint.text()
     dialog.close()
+
+
+def test_pwned_password_asks_and_leads_back_to_dialog(app, tmp_path, project, hibp):
+    """Fund beim Test unter Debian 13: Die GUI prüfte Passwörter nicht gegen bekannte
+    Datenlecks (nur die CLI). Jetzt wie dort – bei „Nein“ zurück in den Dialog, die
+    Eingaben bleiben; ein Vorschlag ist zufällig und wird nicht abgefragt."""
+    hibp["pwned"][PASSWORD] = 1234
+    window, driver = make(app, tmp_path)
+    rounds, questions, chosen = [], [], {}
+
+    def pack_dialog(dialog):
+        rounds.append(dialog.passwords.password.text())
+        if len(rounds) == 1:
+            fill_passwords(dialog.passwords)
+        else:
+            assert "1.234-mal in bekannten Datenlecks" in dialog.passwords.strength.text()
+            dialog.passwords.suggest("passwort")
+            chosen["password"] = dialog.passwords.password.text()
+        dialog._accept()
+        return dialog.result() == QDialog.Accepted
+    driver.handlers["PackDialog"] = pack_dialog
+    driver.handlers["confirm"] = lambda text: questions.append(text) or False
+    window.pack([project])
+    assert rounds == ["", PASSWORD]  # zweite Runde: das Eingetippte steht noch da
+    assert len(questions) == 1 and "1.234-mal in bekannten Datenlecks" in questions[0]
+    assert "Trotzdem verwenden?" in questions[0]
+    assert hibp["asked"] == [PASSWORD] and not driver.errors
+    assert container.verify(tmp_path / "Projekt.tres0r", chosen["password"]).files == 2
+
+
+def test_unreachable_hibp_is_mentioned_not_skipped_silently(app, tmp_path, project, hibp):
+    hibp["fail"] = HibpUnavailable("HIBP nicht erreichbar: kein Netz")
+    window, driver = make(app, tmp_path)
+    questions = []
+    driver.handlers["PackDialog"] = lambda d: (fill_passwords(d.passwords), d._accept(),
+                                               d.result() == QDialog.Accepted)[2]
+    driver.handlers["confirm"] = lambda text: questions.append(text) or True
+    window.pack([project])
+    assert len(questions) == 1 and "kein Netz" in questions[0] and "übersprungen" in questions[0]
+    assert container.verify(tmp_path / "Projekt.tres0r", PASSWORD).files == 2
+
+
+def test_leak_check_can_be_switched_off_weak_password_still_asks(app, tmp_path, project, hibp):
+    window, driver = make(app, tmp_path)
+    questions, rounds = [], []
+
+    def pack_dialog(dialog):
+        rounds.append(1)
+        dialog.passwords.online.setChecked(False)  # wie --offline in der CLI
+        fill_passwords(dialog.passwords, "kurz" if len(rounds) == 1 else PASSWORD)
+        dialog._accept()
+        return dialog.result() == QDialog.Accepted
+    driver.handlers["PackDialog"] = pack_dialog
+    driver.handlers["confirm"] = lambda text: questions.append(text) or False
+    window.pack([project])
+    assert len(rounds) == 2 and len(questions) == 1 and "kürzer als 12 Zeichen" in questions[0]
+    assert hibp["asked"] == []  # nichts ging ins Netz
+    assert container.verify(tmp_path / "Projekt.tres0r", PASSWORD).files == 2
+
+
+def test_password_can_be_suggested_instead_of_passphrase(app, tmp_path, project, hibp):
+    """Fund beim Test unter Debian 13: Die GUI schlug nur Passphrasen vor, obwohl der
+    Generator auch Passwörter kann."""
+    window, driver = make(app, tmp_path)
+    chosen = {}
+
+    def pack_dialog(dialog):
+        dialog.show()
+        app.processEvents()
+        buttons = {button.text(): button for button in dialog.findChildren(QPushButton)}
+        buttons["Passphrase vorschlagen"].click()
+        assert "-" in dialog.passwords.password.text()
+        buttons["Passwort vorschlagen"].click()
+        app.processEvents()
+        password = dialog.passwords.password.text()
+        # ohne Sonderzeichen (Tottasten ^ und `) und ohne Verwechselbares – leicht abzuschreiben
+        assert len(password) == passgen.DEFAULT_PASSWORD_LEN and password.isalnum()
+        assert not set(password) & set("Il1O0")
+        assert dialog.passwords.confirm.text() == password == dialog.passwords.suggestion.text()
+        assert int(re.search(r"(\d+) Bit", dialog.passwords.suggestion_hint.text()).group(1)) >= 100
+        chosen["password"] = password
+        dialog._accept()
+        return dialog.result() == QDialog.Accepted
+    driver.handlers["PackDialog"] = pack_dialog
+    window.pack([project])
+    assert hibp["asked"] == [] and not driver.errors
+    assert container.verify(tmp_path / "Projekt.tres0r", chosen["password"]).files == 2
+
+
+def test_new_password_in_key_management_is_checked_too(app, tmp_path, project, hibp):
+    out = container.create([project], tmp_path / "k.tres0r", PASSWORD, FAST).path
+    hibp["pwned"]["zweites-passwort"] = 7
+    window, driver = make(app, tmp_path)
+    window.select(out)
+    driver.handlers["UnlockDialog"] = unlock_with()
+    typed, questions = iter(["zweites-passwort", "drittes-passwort"]), []
+
+    def new_password(dialog):
+        fill_passwords(dialog.passwords, next(typed))
+        dialog._accept()
+        return dialog.result() == QDialog.Accepted
+    driver.handlers["NewPasswordDialog"] = new_password
+    driver.handlers["KeysDialog"] = lambda dialog: dialog.add_password() or True
+    driver.handlers["confirm"] = lambda text: questions.append(text) or False
+    window.keys()
+    assert not driver.errors, driver.errors
+    assert len(questions) == 1 and "7-mal" in questions[0]
+    assert hibp["asked"] == ["zweites-passwort", "drittes-passwort"]
+    container.check_credentials(out, "drittes-passwort")
+    with pytest.raises(WrongPassword):
+        container.check_credentials(out, "zweites-passwort")
+
+
+def test_leak_check_cancels_at_once(monkeypatch):
+    """Die HIBP-Anfrage wartet bei schlechtem Netz bis zu 20 s – „Abbrechen“ muss sofort wirken."""
+    release = threading.Event()
+    monkeypatch.setattr(passgen, "hibp_count", lambda password: release.wait(30) and 0)
+    token = CancelToken()
+    threading.Timer(0.2, token.cancel).start()
+    started = time.monotonic()
+    with pytest.raises(Cancelled):
+        gui._leak_check(PASSWORD)(Monitor(cancel=token))
+    assert time.monotonic() - started < 2
+    release.set()  # die liegengebliebene Anfrage beenden
+    for thread in threading.enumerate():
+        if thread.name == "tres0r-hibp":
+            thread.join(5)
 
 
 def test_phrase_wraps_only_between_words_and_still_unlocks():

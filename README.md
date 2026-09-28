@@ -114,9 +114,11 @@ Mehrfachauswahl zum Entpacken. Die Schlüsselverwaltung kann dasselbe wie in der
 ein neues Passwort bekommt die Stufe des vorhandenen. Neue Phrasen und Anteile
 erscheinen einmal vollständig (Phrasen mit Leerzeichen zwischen den Wörtern, Anteile
 in Vierergruppen – so abgetippt gelten beide) und lassen sich als Dateien (0600)
-speichern. Die
-vorgeschlagene Passphrase steht in einem einzeiligen Feld – ein Zeilenumbruch nach
-einem Bindestrich wäre beim Abschreiben mehrdeutig. Namen und Fehlermeldungen werden
+speichern. Beim
+Packen schlägt sie wahlweise eine Passphrase oder ein Passwort vor – in einem
+einzeiligen Feld, ein Zeilenumbruch nach einem Bindestrich wäre beim Abschreiben
+mehrdeutig. Selbst gewählte Passwörter prüft sie wie die CLI gegen bekannte
+Datenlecks (HIBP, per Häkchen abschaltbar). Namen und Fehlermeldungen werden
 stets als reiner Text gezeigt (nie als HTML). Qt-eigene Texte folgen der
 Systemsprache. Nicht Teil der stabilen API.
 
@@ -544,8 +546,9 @@ Vertragstest, der meldet, wenn sich eine genutzte Schnittstelle ändert.
 
 ## Passwort-Prüfung (HIBP)
 
-Beim Festlegen eines Passworts fragt tres0r die Pwned-Passwords-API ab
-(abschaltbar mit `--offline`). Übertragen werden nur die ersten **5 Hex-Zeichen**
+Beim Festlegen eines Passworts fragen CLI und grafische Oberfläche die
+Pwned-Passwords-API ab (abschaltbar mit `--offline` bzw. per Häkchen; die
+Textoberfläche prüft bisher nur offline). Übertragen werden nur die ersten **5 Hex-Zeichen**
 des SHA-1-Hashes (k-Anonymität); mit `Add-Padding` ist auch die Antwortgröße
 unabhängig vom Präfix. Ist die API nicht erreichbar, gibt es einen Hinweis statt
 eines Abbruchs.
