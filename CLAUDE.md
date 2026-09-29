@@ -127,11 +127,12 @@ mit eigenem Index, Prüfung auf hängende Threads nach jedem Test),
 
 ## Offen
 
-* macOS: FUSE ungetestet (die CI-Jobs dort laufen ohne GUI und FUSE). GUI und TUI von 1.2.0
-  hat Julian unter macOS Tahoe 26.7 gestartet und bedient – die Befunde (Schriftwarnung,
-  Fokus-Knopf, Scrollleiste, unsichtbarer Fortschrittsbalken) sind in 1.3.0 behoben, die
-  Korrekturen dort aber noch nicht von Hand bestätigt, ebenso wenig Erfolgsmeldungen und
-  Hilfe/Beenden aus 1.3.0. `mount` ist nur für Linux und macOS vorgesehen.
+* macOS: FUSE ungetestet (die CI-Jobs dort laufen ohne GUI und FUSE). GUI und TUI hat ein
+  macOS-Nutzer unter Tahoe 26.7 bedient (Rückmeldung über Julian): 1.2.0 lief, die Befunde
+  daraus (Schriftwarnung, Fokus-Knopf, Scrollleiste, unsichtbarer Fortschrittsbalken) sind
+  in 1.3.0 behoben, und die Änderungen aus 1.3.0 wurden dort als funktionierend bestätigt.
+  Unter Windows und Linux sind Erfolgsmeldungen und Hilfe/Beenden aus 1.3.0 nur automatisch
+  getestet. `mount` ist nur für Linux und macOS vorgesehen.
 * GUI auf echten Desktops: Julian hat sie von Hand ausprobiert – 1.0 unter Debian 13
   (seine Befunde → 1.1.0) und 1.0.1 von PyPI unter Windows Server 2025, beides lief.
   Nicht gezielt geprüft: X11/Wayland, Themes, HiDPI, Drag & Drop, Dateidialoge.
