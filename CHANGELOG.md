@@ -1,6 +1,6 @@
 # Changelog
 
-## Unveröffentlicht
+## 1.3.0 – Erfolg eindeutig, Hilfe und Beenden in allen Oberflächen
 
 Format und Python-API sind unverändert. Kommandozeile: neuer Befehl `help`, Bedienfehler
 enden mit Exit 1 statt 2 (siehe „Behoben“).
