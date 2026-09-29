@@ -110,7 +110,7 @@ def _commands(parser: argparse.ArgumentParser) -> list[tuple[str, argparse.Argum
 
 def _usage(sub: argparse.ArgumentParser) -> str:
     text = " ".join(sub.format_usage().split())
-    return re.sub(r"^usage:\s*", "", text)
+    return re.sub(r"^(usage|Aufruf):\s*", "", text)  # die CLI sagt "Aufruf:" (cli._Formatter)
 
 
 # --- Manpage -----------------------------------------------------------------
@@ -151,7 +151,8 @@ def manpage(parser: argparse.ArgumentParser | None = None) -> str:
             flags = ", ".join(action.option_strings)
             value = f" {_metavar(action)}" if _takes_value(action) else ""
             out += [".TP", f".B {_roff(flags)}{_roff(value)}", _roff(_help(sub, action))]
-    codes = [("0", "Erfolg."), ("1", "Fehler oder Abbruch."), ("2", "Falsches Passwort bzw. kein passender Schlüssel."),
+    codes = [("0", "Erfolg."), ("1", "Fehler oder Abbruch, auch Bedienfehler (unbekannte Option, fehlende Angabe)."),
+             ("2", "Falsches Passwort bzw. kein passender Schlüssel."),
              ("3", "Container beschädigt, manipuliert oder unsicher; Signatur fehlt oder ist falsch."),
              ("4", "diff: Unterschiede gefunden."), ("130", "Abbruch mit Strg+C.")]
     out += [".SH EXIT\\-CODES"]

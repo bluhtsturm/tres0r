@@ -1,5 +1,56 @@
 # Changelog
 
+## Unveröffentlicht
+
+Format und Python-API sind unverändert. Kommandozeile: neuer Befehl `help`, Bedienfehler
+enden mit Exit 1 statt 2 (siehe „Behoben“).
+
+### Wünsche aus dem Test unter macOS (Tahoe 26.7): Erfolg eindeutig, Hilfe und Beenden „für doofe“
+
+* **TUI – Erfolg:** Über der Zusammenfassung steht eine grüne Kopfzeile mit ✓
+  („Erfolgreich gepackt“, „Prüfung erfolgreich“, „Passwort geändert“ …), der Rahmen
+  wird grün; Fehler erscheinen rot mit ✗, ein Abbruch gelb. `Esc` bricht eine laufende
+  Aufgabe ab und schließt das Fenster danach.
+* **TUI – Hilfe und Beenden:** `?`, `h` oder `F1` öffnen die Hilfe zur jeweiligen
+  Ansicht (Erklärung und alle Tasten, aus den Tastenbelegungen erzeugt), `q` beendet in
+  jeder Ansicht. Beides steht vorn in der Fußzeile, die jetzt auch bei 80 Spalten ganz
+  passt. In Eingabefeldern bleiben `q`, `h` und `?` Zeichen – die Fußzeile zeigt dann
+  `F1`, und beim Packen liegt der Fokus gleich im Passwortfeld. `Strg+C` erklärt auf
+  Deutsch, wie man beendet. In der Schlüsselverwaltung stehen `w`, `e` und `s` nicht mehr
+  in der Fußzeile (sie passte nicht in 80 Spalten), sondern ausgeschrieben unter der Tabelle.
+* **GUI:** Nach Packen, Entpacken, Prüfen, Anhängen und Schlüsseländerungen bleibt der
+  Fortschrittsdialog mit „✓ Erfolgreich …“ und Zusammenfassung offen, bis man ihn schließt
+  (auch mit Esc) – vorher stand der Erfolg nur zehn Sekunden in der Statuszeile. Neue
+  Menüleiste: „Datei“ mit allen Aktionen und Beenden (Strg+Q, unter macOS ⌘Q), „Hilfe“
+  mit einer Kurzanleitung samt den Tastenkürzeln der Plattform (F1 bzw. ⌘?) und „Über tres0r“.
+* **CLI:** `pack` meldet „Erfolgreich gepackt: …“, `unpack` schließt mit „Erfolgreich
+  entpackt: …“ (auf stderr – stdout bleibt die Liste der Namen). Kein ✓: Windows-Konsolen
+  schreiben umgeleitet in cp1252. `tres0r help [BEFEHL]` zeigt die Hilfe, nur `tres0r`
+  die Übersicht statt einer englischen Fehlermeldung. Hilfe und die häufigsten
+  Fehlermeldungen sind deutsch („Aufruf:“, „Es fehlt: PFAD“, mit Hinweis auf `-h`).
+
+### Behoben
+
+* **GUI unter macOS:** Warnung „Populating font family aliases took 133 ms. Replace uses
+  of missing font family "Monospace" …“ – die Festbreitenschrift hieß fest „monospace“,
+  die es dort nicht gibt. Jetzt die der Plattform (Menlo, Consolas, DejaVu Sans Mono …).
+* **GUI:** Der Hinweis „Packen mit Strg+P“ stimmte unter macOS nicht (dort ⌘P) – Kürzel
+  stehen jetzt in der Schreibweise der Plattform.
+* **TUI – Fortschrittsbalken unsichtbar:** Zu sehen war nur „100%“ (Bildschirmfoto). Die
+  ID `bar` traf auch Textuals inneren Balken, und dessen Rand schob ihn aus der
+  einzeiligen Leiste – auf allen Systemen.
+* **TUI – Darstellung (Bildschirmfotos unter macOS):** Der Knopf mit dem Fokus hatte
+  einen weißen Kasten (Textual invertiert die Beschriftung) – jetzt fett und
+  unterstrichen. Die Scrollleisten hatten eine schwarze Spur, die neben dem grauen
+  Dateibaum wie ein Darstellungsfehler wirkte – jetzt nur der Balken. Rückfragen und
+  andere Fenster reichten bis zum Bildschirmrand, die Trennlinie der Details endete nach
+  wenigen Zeilen, Tastenhinweise endeten umbrochen auf „·“ oder waren abgeschnitten.
+* **TUI:** Die neue Wiederherstellungsphrase brach bei 80 Spalten mitten im Wort um
+  („vertiefe⏎n-strom“) – jetzt wie in der GUI mit Leerzeichen zwischen den Wörtern; so
+  abgetippt entsperrt sie genauso.
+* **CLI:** Bedienfehler (unbekannte Option, fehlende Angabe) endeten mit Exit 2, und der
+  heißt bei tres0r „falsches Passwort“ – ein Skript konnte das verwechseln. Jetzt Exit 1.
+
 ## 1.2.0 – Länge der Vorschläge wählbar
 
 Format, Python-API und Kommandozeile sind unverändert.

@@ -15,7 +15,10 @@ import threading
 from pathlib import Path
 from typing import Callable
 
+from rich.console import Group
 from rich.markup import escape
+from rich.table import Table
+from rich.text import Text
 from textual import on
 from textual.app import App, ComposeResult
 from textual.binding import Binding
@@ -52,6 +55,11 @@ def _describe_error(error: BaseException) -> str:
     return f"Unerwarteter Fehler: {error!r}"
 
 
+def _key_hints(*pairs: tuple[str, str]) -> str:
+    """Tastenhinweise untereinander – im Fließtext umbrochen endete eine Zeile auf "·"."""
+    return "\n".join(f"[dim][b]{key}[/b]  {escape(text)}[/]" for key, text in pairs)
+
+
 def _duration(seconds: float | None) -> str:
     if seconds is None:
         return ""
@@ -63,26 +71,34 @@ def _duration(seconds: float | None) -> str:
 # Fortschritt
 # ---------------------------------------------------------------------------
 class ProgressScreen(ModalScreen):
-    """Führt ``task(monitor)`` in einem Thread aus; Ergebnis per ``dismiss``."""
+    """Führt ``task(monitor)`` in einem Thread aus; Ergebnis per ``dismiss``. Nach Erfolg steht
+    ``success`` als grüne Kopfzeile mit ✓ über der Zusammenfassung – eindeutig auch ohne Farbe."""
 
+    # Rahmen je Ausgang. Der Balken heißt nicht "#bar": So heißt auch der Balken *in* Textuals
+    # ProgressBar – der Rand schob ihn aus seiner einzeiligen Leiste, zu sehen war nur „100%“.
     DEFAULT_CSS = """
     ProgressScreen { align: center middle; }
     #box { width: 76; height: auto; border: round $accent; padding: 1 2; background: $surface; }
-    #bar { margin: 1 0; }
+    #box.-ok { border: round $success; }
+    #box.-failed { border: round $error; }
+    #box.-cancelled { border: round $warning; }
+    #progress { margin: 1 0; }
     #outcome { width: 1fr; height: auto; }
     """
+    BINDINGS = [Binding("escape", "cancel_or_close", "Abbrechen")]
 
-    def __init__(self, title: str, task: Callable[[Monitor], object], done: Callable[[object], str]) -> None:
+    def __init__(self, title: str, task: Callable[[Monitor], object], done: Callable[[object], str],
+                 success: str = "Erfolgreich abgeschlossen") -> None:
         super().__init__()
-        self.title_text, self._job, self._summary = title, task, done
+        self.title_text, self._job, self._summary, self.success = title, task, done, success
         self.token = CancelToken()
         self.outcome: object = None  # Rückgabewert der Aufgabe
         self.failure: BaseException | None = None
 
     def compose(self) -> ComposeResult:
         with Vertical(id="box"):
-            yield Label(self.title_text, id="title")
-            yield ProgressBar(total=None, show_eta=False, id="bar")
+            yield Label(f"[b]{escape(self.title_text)}[/]", id="title")
+            yield ProgressBar(total=None, show_eta=False, id="progress")
             yield Label("", id="phase")
             yield Label("", id="item")
             yield Label("", id="outcome")
@@ -97,8 +113,13 @@ class ProgressScreen(ModalScreen):
         # sonst unsichtbar weiter und hielte bis zu ihrem Ende das Prozessende auf.
         self.token.cancel()
 
+    _progressed = False  # schon eine Fortschrittsmeldung angezeigt?
+
     def _show(self, event: ProgressEvent) -> None:
-        bar = self.query_one("#bar", ProgressBar)
+        if self.is_finished:
+            return  # verspätete Meldung: den Ausgang nicht wieder überschreiben
+        self._progressed = True
+        bar = self.query_one("#progress", ProgressBar)
         if event.total:
             bar.update(total=event.total, progress=event.done)
         labels = {"schlüssel": "Schlüsselableitung (Argon2id) …", "durchsuchen": "Durchsuche …",
@@ -123,22 +144,35 @@ class ProgressScreen(ModalScreen):
         button = self.query_one("#cancel", Button)
         button.label, button.variant = "Schließen", "primary"
         outcome = self.query_one("#outcome", Label)
+        box = self.query_one("#box")
         if event.state == WorkerState.SUCCESS:
             self.outcome = event.worker.result
-            bar = self.query_one("#bar", ProgressBar)
-            bar.update(total=1, progress=1)
-            outcome.update(escape(self._summary(self.outcome)))
+            self.query_one("#progress", ProgressBar).update(total=1, progress=1)
+            for label in ("#phase", "#item"):  # „Verschlüssele …“ und die letzte Datei sind jetzt überholt
+                self.query_one(label, Label).display = False
+            outcome.update(f"[b green]✓ {escape(self.success)}[/]\n{escape(self._summary(self.outcome))}")
+            box.add_class("-ok")
         else:
-            self.failure = event.worker.error
-            message = ("Abgebrochen – nichts wurde verändert." if isinstance(self.failure, Cancelled)
-                       else _describe_error(self.failure))
-            outcome.update(f"[b red]{escape(message)}[/]")
+            bar = self.query_one("#progress", ProgressBar)
+            if bar.total is None:  # unbestimmt: der wandernde Balken täte so, als liefe noch etwas
+                bar.display = False
+            if not self._progressed:  # keine Meldung kam an: leere Zeilen weglassen
+                for label in ("#phase", "#item"):
+                    self.query_one(label, Label).display = False
+            if isinstance(event.worker.error, Cancelled) or event.state == WorkerState.CANCELLED:
+                self.failure = event.worker.error or Cancelled("Abgebrochen.")
+                outcome.update("[b yellow]Abgebrochen – nichts wurde verändert.[/]")
+                box.add_class("-cancelled")
+            else:
+                self.failure = event.worker.error
+                outcome.update(f"[b red]✗ Fehlgeschlagen: {escape(_describe_error(self.failure))}[/]")
+                box.add_class("-failed")
         self.is_finished = True
 
     is_finished = False
 
     @on(Button.Pressed, "#cancel")
-    def _cancel_or_close(self) -> None:
+    def action_cancel_or_close(self) -> None:
         if self.is_finished:
             self.dismiss(self.outcome)
         else:
@@ -402,10 +436,12 @@ class SecretsScreen(ModalScreen):
 
     @staticmethod
     def readable(value: str) -> str:
-        """Lange Anteile in Vierergruppen – lesbar und umbrechbar; beim Einlesen zählen
-        Leerzeichen nicht (shamir.parse_share). Phrasen bleiben, wie sie sind."""
+        """Wie in der GUI: Anteile in Vierergruppen, Phrasen mit Leerzeichen zwischen den Wörtern –
+        so bricht Rich nur zwischen Wörtern um. Mit "-" brach die Phrase mitten im Wort um
+        ("vertiefe⏎n-strom", gesehen bei 80 Spalten). Beides gilt so abgetippt wieder: Anteile
+        ignorieren Leerzeichen, Phrasen werden kanonisiert (keys.canonical_secret)."""
         if not value.startswith("tres0r-teil-"):
-            return value
+            return value.replace("-", " ")
         body = value[len("tres0r-teil-"):]
         return "tres0r-teil-" + " ".join(body[i:i + 4] for i in range(0, len(body), 4))
 
@@ -500,15 +536,105 @@ class NewPasswordScreen(ModalScreen):
 
 
 # ---------------------------------------------------------------------------
+# Hilfe
+# ---------------------------------------------------------------------------
+KEY_NAMES = {"escape": "Esc", "slash": "/", "question_mark": "?", "f1": "F1"}
+
+
+class Page(Screen):
+    """Vollbild-Ansicht. ? / h / F1 öffnen die Hilfe, q beendet – vorn in der Fußzeile, damit sie auch
+    bei 80 Spalten sichtbar bleiben (Textual schneidet rechts ab). In Eingabefeldern gehören ?, h und q
+    dem Feld; die Fußzeile zeigt dann F1 (von mehreren Tasten einer Aktion zeigt sie die erste nutzbare)."""
+
+    BINDINGS = [Binding("question_mark", "app.help", "Hilfe", tooltip="Tasten und Erklärungen zu dieser Ansicht"),
+                Binding("f1", "app.help", "Hilfe", key_display="F1"),
+                Binding("h", "app.help", "Hilfe", show=False),
+                Binding("q", "app.quit", "Beenden", tooltip="tres0r beenden")]
+    HELP_TITLE = ""
+    HELP = ""  # Erklärung für die Hilfe; die Tasten stellt HelpScreen aus BINDINGS zusammen
+
+
+class HelpScreen(ModalScreen):
+    """Hilfe zur Ansicht darunter: ihre Erklärung und ihre Tasten – aus ihren BINDINGS erzeugt, damit
+    die Hilfe nie etwas anderes sagt, als die Tasten tun."""
+
+    DEFAULT_CSS = """
+    HelpScreen { align: center middle; }
+    #box { width: 100%; max-width: 90; max-height: 90%; height: auto; border: round $accent; padding: 1 2;
+           background: $surface; }
+    #box > Static { width: 1fr; }
+    #close { margin-top: 1; }
+    """
+    BINDINGS = [Binding("escape", "close", "Schließen"), Binding("question_mark", "close", show=False),
+                Binding("h", "close", show=False), Binding("f1", "close", show=False),
+                Binding("q", "app.quit", "Beenden", show=False)]
+    COMMON = [("? · h · F1", "diese Hilfe (in Eingabefeldern nur F1 – am Mac oft mit fn)"),
+              ("q", "tres0r beenden (in Eingabefeldern und Fenstern: Strg+Q)"),
+              ("Esc", "zurück bzw. abbrechen"),
+              ("Tab · Umschalt+Tab", "zum nächsten bzw. vorigen Feld oder Knopf"),
+              ("Pfeiltasten", "auswählen"),
+              ("Enter · Leertaste", "Knopf drücken, Schalter umlegen, Ordner auf- und zuklappen"),
+              ("Maus", "Klicken und Scrollen gehen auch")]
+
+    def __init__(self, page: Page) -> None:
+        super().__init__()
+        self.page = page
+
+    def rows(self) -> list[tuple[str, str]]:
+        """Tasten der Ansicht (auch ausgeblendete wie r), ohne die gemeinsamen von ``Page``."""
+        return [(KEY_NAMES.get(b.key, b.key), b.tooltip or b.description)
+                for b in type(self.page).__dict__.get("BINDINGS", [])]
+
+    @staticmethod
+    def table(rows: list[tuple[str, str]]) -> Table:
+        """Zwei Spalten; lange Erklärungen brechen in ihrer Spalte um (reiner Text, kein Markup)."""
+        grid = Table.grid(padding=(0, 2))
+        grid.add_column(style="bold", no_wrap=True)
+        grid.add_column()
+        for key, text in rows:
+            grid.add_row(Text(key), Text(text))
+        return grid
+
+    def compose(self) -> ComposeResult:
+        page = type(self.page)
+        with VerticalScroll(id="box"):
+            yield Static(f"[b]Hilfe – {escape(page.HELP_TITLE)}[/]\n\n{escape(page.HELP)}\n", id="about")
+            if rows := self.rows():
+                yield Label("[b]Tasten in dieser Ansicht[/]")
+                yield Static(self.table(rows), id="keys")
+            yield Label("\n[b]Überall[/]")
+            yield Static(self.table(self.COMMON), id="common")
+            yield Button("Schließen", variant="primary", id="close")
+
+    @on(Button.Pressed, "#close")
+    def action_close(self) -> None:
+        self.dismiss(None)
+
+
+# ---------------------------------------------------------------------------
 # Schlüssel verwalten, Vergleich
 # ---------------------------------------------------------------------------
-class KeysScreen(Screen):
+class KeysScreen(Page):
     """Keyslots eines entsperrten Containers ansehen und ändern."""
 
-    BINDINGS = [Binding("n", "add_password", "+Passwort"), Binding("w", "add_recovery", "+Phrase"),
-                Binding("e", "add_recipient", "+Empfänger"), Binding("s", "add_shares", "+Anteile"),
-                Binding("c", "change_password", "Ändern"), Binding("x", "remove", "Entfernen"),
-                Binding("escape", "back", "Zurück")]
+    # w, e und s nur im Hinweis unter der Tabelle (ausgeschrieben) – alle in der Fußzeile passten nicht in 80 Spalten
+    BINDINGS = [Binding("n", "add_password", "+Passwort", tooltip="weiteres Passwort hinzufügen"),
+                Binding("w", "add_recovery", "+Phrase", show=False, tooltip="Wiederherstellungsphrase hinzufügen"),
+                Binding("e", "add_recipient", "+Empfänger", show=False,
+                        tooltip="Empfänger (öffentlicher Schlüssel) hinzufügen"),
+                Binding("s", "add_shares", "+Anteile", show=False,
+                        tooltip="Anteile hinzufügen (K von N öffnen gemeinsam)"),
+                Binding("c", "change_password", "Ändern", tooltip="eigenes Passwort ändern"),
+                Binding("x", "remove", "Entfernen", tooltip="gewählten Schlüssel entfernen"),
+                Binding("escape", "back", "Zurück", tooltip="zurück zur Hauptansicht")]
+    HINTS = [("n", "Passwort hinzufügen"), ("c", "eigenes Passwort ändern"),
+             ("w", "Wiederherstellungsphrase hinzufügen"), ("x", "gewählten Schlüssel entfernen"),
+             ("e", "Empfänger hinzufügen"), ("Esc", "zurück"),
+             ("s", "Anteile hinzufügen (K von N)"), ("?", "Hilfe")]
+    HELP_TITLE = "Schlüssel verwalten"
+    HELP = ("Jede Zeile ist ein Schlüssel (Keyslot), der den Container für sich allein öffnet – Anteile nur "
+            "gemeinsam (K von N). Änderungen schreiben nur den Kopf des Containers neu, der Inhalt bleibt, "
+            "wie er ist.")
     DEFAULT_CSS = """
     #slots { height: 1fr; }
     #hint { padding: 0 1; }
@@ -521,8 +647,8 @@ class KeysScreen(Screen):
     def compose(self) -> ComposeResult:
         yield Header()
         yield DataTable(id="slots", cursor_type="row")
-        yield Label("", id="hint")
-        yield Footer()
+        yield Static("", id="hint")
+        yield Footer(compact=True)
 
     def on_mount(self) -> None:
         table = self.query_one("#slots", DataTable)
@@ -536,22 +662,28 @@ class KeysScreen(Screen):
         for slot in self.info.slots:
             table.add_row(str(slot.index), escape(slot.type), escape(slot.description), key=str(slot.index))
         self.sub_title = f"{self.path.name} – {len(self.info.slots)} Schlüssel"  # Titel sind reiner Text (Content)
-        self.query_one("#hint", Label).update(
-            "[dim]c = eigenes Passwort ändern · x = gewählten Slot entfernen · Esc = zurück. "
-            "Änderungen schreiben nur den Header neu.[/]")
+        # zwei Spalten: passt in 80 Spalten, als Fließtext war der Hinweis rechts abgeschnitten
+        grid = Table.grid(padding=(0, 2))
+        for _ in range(2):
+            grid.add_column(style="bold dim", no_wrap=True)
+            grid.add_column(style="dim")
+        for (key1, text1), (key2, text2) in zip(self.HINTS[::2], self.HINTS[1::2]):
+            grid.add_row(key1, text1, key2, text2)
+        self.query_one("#hint", Static).update(
+            Group(grid, Text("Änderungen schreiben nur den Header neu.", style="dim")))
 
-    def _run(self, title: str, task, summary, after=None) -> None:
+    def _run(self, title: str, success: str, task, summary, after=None) -> None:
         def closed(result) -> None:
             self.refresh_slots()
             if result is not None and after is not None:
                 after(result)
-        self.app.push_screen(ProgressScreen(title, task, summary), closed)
+        self.app.push_screen(ProgressScreen(title, task, summary, success), closed)
 
     def action_add_password(self) -> None:
         def chosen(new) -> None:
             if new is None:
                 return
-            self._run("Passwort hinzufügen", lambda monitor: container.add_keys(
+            self._run("Passwort hinzufügen", "Passwort hinzugefügt", lambda monitor: container.add_keys(
                 self.path, self.credentials, password=new["password"],
                 # gleiche Stufe wie das vorhandene Passwort – ein schwächerer Slot senkt den Schutz
                 params=self.info.kdf or LEVELS["normal"],
@@ -564,9 +696,9 @@ class KeysScreen(Screen):
 
         def show(_result) -> None:
             self.app.push_screen(SecretsScreen("Wiederherstellungsphrase", [("Phrase", phrase)]))
-        self._run("Wiederherstellungsphrase hinzufügen", lambda monitor: container.add_keys(
-            self.path, self.credentials, recovery=phrase, progress=monitor),
-            lambda added: f"Hinzugefügt: Slot {', '.join(map(str, added))}", show)
+        self._run("Wiederherstellungsphrase hinzufügen", "Wiederherstellungsphrase hinzugefügt",
+                  lambda monitor: container.add_keys(self.path, self.credentials, recovery=phrase, progress=monitor),
+                  lambda added: f"Hinzugefügt: Slot {', '.join(map(str, added))}", show)
 
     def action_add_recipient(self) -> None:
         def chosen(text: str | None) -> None:
@@ -577,7 +709,7 @@ class KeysScreen(Screen):
             except Tres0rError as e:
                 self.notify(escape(str(e)), severity="error")
                 return
-            self._run("Empfänger hinzufügen", lambda monitor: container.add_keys(
+            self._run("Empfänger hinzufügen", "Empfänger hinzugefügt", lambda monitor: container.add_keys(
                 self.path, self.credentials, recipients=[recipient], progress=monitor),
                 lambda added: f"Hinzugefügt: Slot {', '.join(map(str, added))}")
         self.app.push_screen(TextScreen("Öffentlicher Schlüssel des Empfängers", "tres0r-pub-…"), chosen)
@@ -598,7 +730,7 @@ class KeysScreen(Screen):
                 _, shares = result
                 self.app.push_screen(SecretsScreen(f"Anteile ({k} von {n} nötig)",
                                                    [(share.label, share.text()) for share in shares]))
-            self._run("Schwellwert hinzufügen", lambda monitor: container.add_threshold(
+            self._run("Schwellwert hinzufügen", "Schwellwert hinzugefügt", lambda monitor: container.add_threshold(
                 self.path, self.credentials, k, n, progress=monitor),
                 lambda result: f"Hinzugefügt: Slot {result[0]}", show)
         self.app.push_screen(TextScreen("Wie viele Anteile, wie viele davon nötig? (K/N)", "2/3", "2/3"), chosen)
@@ -612,7 +744,7 @@ class KeysScreen(Screen):
                 self.credentials = keys.Credentials(passwords=[new["password"]], keyfiles=self.credentials.keyfiles,
                                                     fido2=self.credentials.fido2)
             # change_password gibt nichts zurück – "True" markiert den Erfolg (sonst gälte er als abgebrochen)
-            self._run("Passwort ändern", lambda monitor: container.change_password(
+            self._run("Passwort ändern", "Passwort geändert", lambda monitor: container.change_password(
                 self.path, self.credentials, new["password"], progress=monitor) or True,
                 lambda _r: "Passwort geändert (ein zweiter Faktor bleibt bestehen).", done)
         self.app.push_screen(NewPasswordScreen("Passwort ändern", second_factor=False), chosen)
@@ -629,7 +761,7 @@ class KeysScreen(Screen):
 
         def confirmed(yes: bool) -> None:
             if yes:
-                self._run("Schlüssel entfernen", lambda monitor: container.remove_key(
+                self._run("Schlüssel entfernen", "Schlüssel entfernt", lambda monitor: container.remove_key(
                     self.path, self.credentials, index, progress=monitor),
                     lambda removed: f"Entfernt: {removed.description}")
         self.app.push_screen(ConfirmScreen(f"Slot {index} ({slot.description}) wirklich entfernen? "
@@ -640,8 +772,11 @@ class KeysScreen(Screen):
         self.app.pop_screen()
 
 
-class DiffScreen(Screen):
-    BINDINGS = [Binding("escape", "back", "Zurück")]
+class DiffScreen(Page):
+    BINDINGS = [Binding("escape", "back", "Zurück", tooltip="zurück zur Hauptansicht")]
+    HELP_TITLE = "Vergleich"
+    HELP = ("Unterschiede zwischen dem Container und den Dateien auf der Platte: neu, entfernt, geändert, "
+            "anderer Typ oder anderes Linkziel.")
 
     def __init__(self, title: str, result: container.DiffResult) -> None:
         super().__init__()
@@ -651,7 +786,7 @@ class DiffScreen(Screen):
         yield Header()
         yield Label(escape(self.title_text), id="summary")
         yield DataTable(id="changes", cursor_type="row")
-        yield Footer()
+        yield Footer(compact=True)
 
     def on_mount(self) -> None:
         table = self.query_one("#changes", DataTable)
@@ -670,15 +805,20 @@ class DiffScreen(Screen):
 # ---------------------------------------------------------------------------
 # Container ansehen
 # ---------------------------------------------------------------------------
-class BrowseScreen(Screen):
+class BrowseScreen(Page):
     """Inhaltsbaum eines entsperrten Containers."""
 
-    BINDINGS = [Binding("slash", "search", "Suchen"), Binding("e", "extract", "Auswahl entpacken"),
-                Binding("a", "extract_all", "Alles entpacken"), Binding("v", "verify", "Prüfen"),
-                Binding("escape", "back", "Zurück")]
+    BINDINGS = [Binding("slash", "search", "Suchen", tooltip="Einträge filtern: Textteil oder Muster wie *.jpg"),
+                Binding("e", "extract", "Entpacken", tooltip="gewählten Eintrag entpacken"),
+                Binding("a", "extract_all", "Alles entpacken", tooltip="gesamten Inhalt entpacken"),
+                Binding("v", "verify", "Prüfen", tooltip="Container vollständig prüfen (schreibt nichts)"),
+                Binding("escape", "back", "Zurück", tooltip="Suche beenden bzw. zurück zur Hauptansicht")]
+    HELP_TITLE = "Inhalt eines Containers"
+    HELP = ("Der entschlüsselte Inhalt; rechts stehen Details zum gewählten Eintrag. Entpacken schreibt in "
+            "einen Ordner nach Wahl – der Container selbst bleibt unverändert.")
     DEFAULT_CSS = """
     #contents { width: 2fr; }
-    #entry { width: 1fr; padding: 1 2; border-left: solid $accent; }
+    #entry { width: 1fr; height: 1fr; padding: 1 2; border-left: solid $accent; }
     #filter { display: none; }
     #filter.shown { display: block; }
     """
@@ -693,7 +833,7 @@ class BrowseScreen(Screen):
         with Horizontal():
             yield Tree(escape(self.path.name), id="contents")
             yield Static("Eintrag wählen …", id="entry")
-        yield Footer()
+        yield Footer(compact=True)
 
     def on_mount(self) -> None:
         self.by_name = {e.name.strip("/"): e for e in self.entries}
@@ -781,7 +921,7 @@ class BrowseScreen(Screen):
             self.app.push_screen(ProgressScreen(
                 "Entpacken", lambda monitor: container.extract(self.path, dest, self.credentials, progress=monitor,
                                                                 only=only),
-                lambda result: f"{result.entries} Einträge nach {dest} entpackt."))
+                lambda result: f"{result.entries} Einträge nach {dest} entpackt.", "Erfolgreich entpackt"))
         self.app.push_screen(PathScreen("Wohin entpacken?", Path.cwd()), chosen)
 
     def action_verify(self) -> None:
@@ -789,7 +929,7 @@ class BrowseScreen(Screen):
             "Prüfen", lambda monitor: container.verify(self.path, self.credentials, progress=monitor),
             lambda r: f"Intakt: {r.files} Dateien, {_size(r.bytes)}"
                       + (", alle SHA-256 abgeglichen" if r.checked_hashes else "")
-                      + (f", signiert von {r.signer}" if r.signer else "")))
+                      + (f", signiert von {r.signer}" if r.signer else ""), "Prüfung erfolgreich"))
 
     def action_back(self) -> None:
         field = self.query_one("#filter", Input)
@@ -805,8 +945,16 @@ class BrowseScreen(Screen):
 # ---------------------------------------------------------------------------
 # Packen
 # ---------------------------------------------------------------------------
-class PackScreen(Screen):
-    BINDINGS = [Binding("escape", "back", "Zurück")]
+class PackScreen(Page):
+    BINDINGS = [Binding("escape", "back", "Zurück", tooltip="zurück, ohne zu packen")]
+    # Tippen geht gleich ins Passwort – sonst läge der Fokus auf dem Formular, und ein q (Beenden) oder
+    # h (Hilfe) am Anfang des Passworts wäre eine Taste statt ein Zeichen
+    AUTO_FOCUS = "#password"
+    HELP_TITLE = "Packen"
+    HELP = ("Verschlüsselt die Auswahl in einen neuen Container; das Original bleibt, wie es ist. Zieldatei "
+            "und Stufe wählen (höher = Angriffe auf das Passwort teurer, Öffnen dauert länger), dann das "
+            "Passwort zweimal eingeben – oder einen Vorschlag erzeugen lassen und vollständig notieren.\n\n"
+            "Ohne das Passwort kommt niemand mehr an den Inhalt – auch nicht mit tres0r.")
     DEFAULT_CSS = """
     #form { padding: 0 2; scrollbar-gutter: stable; }  /* Breite fest: der Vorschlag ist darauf umbrochen */
     #form Horizontal { height: auto; }
@@ -866,7 +1014,7 @@ class PackScreen(Screen):
                 yield Button("Passphrase vorschlagen", id="suggest")
                 yield Button("Passwort vorschlagen", id="suggest-password")
                 yield Button("Packen", variant="primary", id="start")
-        yield Footer()
+        yield Footer(compact=True)
 
     @on(Input.Changed, "#password")
     def _strength(self, event: Input.Changed) -> None:
@@ -950,12 +1098,13 @@ class PackScreen(Screen):
         def closed(result) -> None:
             if result is not None:
                 self.app.pop_screen()
-                self.app.notify(escape(f"Gepackt: {result.path}"))
+                self.app.notify(escape(f"✓ Erfolgreich gepackt: {result.path}"))
                 self.app.refresh_files()
 
         def pack() -> None:
             self.app.push_screen(ProgressScreen(
-                "Packen", task, lambda r: f"{r.path} – {_size(r.size)}, {r.entries} Einträge"), closed)
+                "Packen", task, lambda r: f"{r.path} – {_size(r.size)}, {r.entries} Einträge", "Erfolgreich gepackt"),
+                closed)
 
         def rejected(why: str) -> None:  # „Trotzdem verwenden? – Nein“: zurück, die Eingaben bleiben
             self.query_one("#strength", Label).update(f"[yellow]{escape(why)}[/]")
@@ -973,16 +1122,27 @@ class PackScreen(Screen):
 # ---------------------------------------------------------------------------
 # Hauptansicht
 # ---------------------------------------------------------------------------
-class MainScreen(Screen):
+class MainScreen(Page):
     """Dateibaum und Details; Kürzel gelten nur hier."""
 
-    BINDINGS = [Binding("o", "open", "Öffnen"), Binding("p", "pack", "Packen"), Binding("v", "verify", "Prüfen"),
-                Binding("a", "append", "Anhängen"), Binding("d", "diff", "Vergleich"),
-                Binding("k", "keys", "Schlüssel"), Binding("r", "refresh_files", "Neu laden", show=False),
-                Binding("q", "app.quit", "Beenden", show=False)]
+    BINDINGS = [Binding("o", "open", "Öffnen", tooltip="Container öffnen: Inhalt ansehen und entpacken"),
+                Binding("p", "pack", "Packen", tooltip="Datei oder Ordner in einen neuen Container verschlüsseln"),
+                Binding("v", "verify", "Prüfen", tooltip="Container vollständig prüfen (schreibt nichts)"),
+                Binding("a", "append", "Anhängen", tooltip="Datei oder Ordner an den Container anhängen"),
+                Binding("d", "diff", "Vergleich", tooltip="Container mit Dateien auf der Platte vergleichen"),
+                Binding("k", "keys", "Schlüssel", tooltip="Passwörter und andere Schlüssel des Containers verwalten"),
+                Binding("r", "refresh_files", "Neu laden", show=False, tooltip="Dateibaum neu einlesen")]
+    HELP_TITLE = "Hauptansicht"
+    HELP = ("Links steht der Dateibaum, rechts stehen Details zur Auswahl.\n\n"
+            "Verschlüsseln: Datei oder Ordner wählen und p drücken – tres0r packt die Auswahl in einen neuen "
+            "Container (Endung .tres0r). Das Original bleibt, wie es ist.\n\n"
+            "Einen Container wählen, dann: o öffnen (Inhalt ansehen und entpacken), v prüfen, a etwas anhängen, "
+            "d mit Dateien auf der Platte vergleichen, k Schlüssel verwalten (Passwörter, "
+            "Wiederherstellungsphrase …).")
+    # Details über die volle Höhe: sonst endete die Trennlinie nach wenigen Zeilen (macOS-Bildschirmfoto)
     DEFAULT_CSS = """
     #files { width: 1fr; }
-    #details { width: 1fr; padding: 1 2; border-left: solid $accent; }
+    #details { width: 1fr; height: 1fr; padding: 1 2; border-left: solid $accent; }
     """
 
     def __init__(self, start: Path) -> None:
@@ -996,7 +1156,7 @@ class MainScreen(Screen):
         with Horizontal():
             yield DirectoryTree(self.start, id="files")
             yield Static("Datei oder Ordner wählen …", id="details")
-        yield Footer()
+        yield Footer(compact=True)
 
     # -- Auswahl ------------------------------------------------------------
     @on(DirectoryTree.FileSelected)
@@ -1021,7 +1181,8 @@ class MainScreen(Screen):
         if self.info is None:
             kind = "Ordner" if path.is_dir() else "Datei"
             size = "" if path.is_dir() else f"\nGröße: {_size(path.stat().st_size)}"
-            details.update(f"[b]{escape(path.name)}[/]\n{kind}{size}\n\n[dim]p packen · r neu laden · q beenden[/]")
+            details.update(f"[b]{escape(path.name)}[/]\n{kind}{size}\n\n" + _key_hints(
+                ("p", "packen (verschlüsseln)"), ("r", "neu laden"), ("?", "Hilfe"), ("q", "beenden")))
             return
         info = self.info
         lines = [f"[b]{escape(path.name)}[/]", f"tres0r-Container, Format v{info.version}",
@@ -1035,7 +1196,8 @@ class MainScreen(Screen):
             lines.append(f"{info.volumes} Teile")
         if info.interrupted:
             lines.append("[b red]Anhängen unterbrochen – 'tres0r repair'[/]")
-        lines.append("\n[dim]o öffnen · v prüfen · a anhängen · d vergleichen · k Schlüssel · q beenden[/]")
+        lines.append("\n" + _key_hints(("o", "öffnen"), ("v", "prüfen"), ("a", "anhängen"), ("d", "vergleichen"),
+                                       ("k", "Schlüssel"), ("?", "Hilfe"), ("q", "beenden")))
         details.update("\n".join(lines))
 
     def refresh_files(self) -> None:
@@ -1081,7 +1243,7 @@ class MainScreen(Screen):
             credentials_box.append(credentials)
             self.app.push_screen(ProgressScreen(
                 "Öffnen", lambda monitor: container.list_contents(path, credentials, progress=monitor),
-                lambda entries: f"{len(entries)} Einträge"), listed)
+                lambda entries: f"{len(entries)} Einträge", "Erfolgreich geöffnet"), listed)
 
         self._with_credentials(unlocked)
 
@@ -1097,7 +1259,8 @@ class MainScreen(Screen):
                     self.app.push_screen(KeysScreen(path, credentials))
             self.app.push_screen(ProgressScreen(
                 "Entsperren", lambda monitor: container.check_credentials(path, credentials, progress=monitor),
-                lambda slot: f"Entsperrt über Slot {slot.index} ({slot.description})."), checked)
+                lambda slot: f"Entsperrt über Slot {slot.index} ({slot.description}).", "Erfolgreich entsperrt"),
+                checked)
         self._with_credentials(unlocked)
 
     def action_append(self) -> None:
@@ -1113,7 +1276,8 @@ class MainScreen(Screen):
                 return
             self._with_credentials(lambda credentials: self.app.push_screen(ProgressScreen(
                 "Anhängen", lambda monitor: container.append(path, [source], credentials, progress=monitor),
-                lambda r: f"Segment {r.segment} angehängt: {r.entries} Einträge, +{_size(r.added)}"),
+                lambda r: f"Segment {r.segment} angehängt: {r.entries} Einträge, +{_size(r.added)}",
+                "Erfolgreich angehängt"),
                 lambda _r: (self.select(path), self.refresh_files())))
         self.app.push_screen(PathScreen("Welche Datei oder welchen Ordner anhängen?", Path.cwd()), chosen)
 
@@ -1133,7 +1297,8 @@ class MainScreen(Screen):
                     self.app.push_screen(DiffScreen(f"{path.name} ↔ {local}", result))
             self._with_credentials(lambda credentials: self.app.push_screen(ProgressScreen(
                 "Vergleichen", lambda monitor: container.diff(path, [local], credentials, progress=monitor),
-                lambda r: "keine Unterschiede" if r.identical else f"{len(r.changes)} Unterschied(e)"), compared))
+                lambda r: "keine Unterschiede" if r.identical else f"{len(r.changes)} Unterschied(e)",
+                "Vergleich abgeschlossen"), compared))
         self.app.push_screen(PathScreen("Womit vergleichen? (dieselben Pfade wie beim Packen)", default), chosen)
 
     def action_verify(self) -> None:
@@ -1144,7 +1309,7 @@ class MainScreen(Screen):
             "Prüfen", lambda monitor: container.verify(path, credentials, progress=monitor),
             lambda r: f"Intakt: {r.files} Dateien, {_size(r.bytes)}"
                       + (f", {r.segments} Segmente" if r.segments > 1 else "")
-                      + (f", signiert von {r.signer}" if r.signer else ""))))
+                      + (f", signiert von {r.signer}" if r.signer else ""), "Prüfung erfolgreich")))
 
 
 
@@ -1152,6 +1317,17 @@ class MainScreen(Screen):
 class Tres0rApp(App):
     TITLE = "tres0r"
     ENABLE_COMMAND_PALETTE = False  # ungenutzt; spart Platz in der Fußzeile
+    # Befunde aus dem Test unter macOS: Textual zeigt den Fokus eines Knopfs mit invertierter Beschriftung –
+    # das sah wie ein weißer Kasten im Knopf aus; jetzt fett und unterstrichen. Die Spur der Scrollleisten
+    # ist bei Textual schwarz (#000) und wirkte neben dem grauen Dateibaum wie ein Darstellungsfehler; jetzt
+    # hat sie die Farbe der Flächen, sichtbar bleibt der Balken.
+    # Knopfreihen in Fenstern: Textuals Horizontal ist 1fr hoch – jedes Fenster reichte bis zum Bildschirmrand.
+    CSS = """
+    Button:focus { text-style: bold underline; }
+    * { scrollbar-background: $surface; scrollbar-background-hover: $surface; scrollbar-background-active: $surface;
+        scrollbar-corner-color: $surface; }
+    #box Horizontal { height: auto; }
+    """
 
     def __init__(self, start: Path | None = None) -> None:
         super().__init__()
@@ -1159,6 +1335,14 @@ class Tres0rApp(App):
 
     def on_mount(self) -> None:
         self.push_screen(self.main)
+
+    def action_help(self) -> None:
+        if isinstance(self.screen, Page):  # nicht über Fenstern, nicht doppelt
+            self.push_screen(HelpScreen(self.screen))
+
+    def action_help_quit(self) -> None:
+        """Strg+C beendet in Textual nicht (kopiert in Eingabefeldern) – auf Deutsch sagen, was geht."""
+        self.notify("Beenden mit q – in Eingabefeldern und Fenstern mit Strg+Q.", title="tres0r beenden?")
 
     def select(self, path: Path) -> None:
         self.main.select(path)

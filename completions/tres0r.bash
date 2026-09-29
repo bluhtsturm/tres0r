@@ -13,7 +13,7 @@ _tres0r() {
         elif [[ -z $sub && -n $nested ]]; then sub="$word"; fi
     done
     if [[ -z $cmd ]]; then
-        COMPREPLY=($(compgen -W "pack unpack verify list info passwd diff append repair mount umount upgrade salvage encrypt decrypt keygen gui tui completion manpage fido2 keyfile pubkey protect keys genpass checkpass bench --help --version" -- "$cur")); return
+        COMPREPLY=($(compgen -W "pack unpack verify list info passwd diff append repair mount umount upgrade salvage encrypt decrypt keygen gui tui completion manpage fido2 keyfile pubkey protect keys genpass checkpass bench help --help --version" -- "$cur")); return
     fi
     if [[ -n $nested && -z $sub ]]; then
         COMPREPLY=($(compgen -W "$nested" -- "$cur")); return
@@ -155,6 +155,10 @@ _tres0r() {
             ;;
         "bench")
             opts="--json --kdf-time --throughput --dir --size --help"; values="--kdf-time|--dir|--size"
+            ;;
+        "help")
+            opts=" --help"; values=""
+            positional="append bench checkpass completion decrypt diff encrypt fido2 genpass gui help info keyfile keygen keys list manpage mount pack passwd protect pubkey repair salvage tui umount unpack upgrade verify"
             ;;
     esac
     if [[ -n $choices ]]; then COMPREPLY=($(compgen -W "$choices" -- "$cur")); return; fi

@@ -89,11 +89,25 @@ mit eigenem Index, Prüfung auf hängende Threads nach jedem Test),
   Tests: Ein Fenster liegt oben, bevor `compose` lief (`showing` wartet auf
   `is_mounted`); den Rückruf eines geschlossenen Fensters reiht `dismiss` per `call_next`
   ein – auf dessen Wirkung warten (`shows_text`), nicht nur auf den Bildschirm darunter.
+  Eigene IDs nicht wie Kinder von Textual-Widgets benennen: `#bar` traf auch den Balken
+  *in* `ProgressBar`, sein Rand schob ihn unsichtbar weg. `Horizontal` ist `1fr` hoch
+  (Fenster bis zum Rand) → in Fenstern `height: auto`. Textual-CSS lehnt `0` bei
+  Ganzzahl-Eigenschaften ab (`line-pad: 0` → Parse-Fehler beim Start). Standard-Fokus eines
+  Knopfs ist invertierte Schrift, die Scrollleisten-Spur schwarz – beides wirkte unter
+  macOS wie ein Fehler, `Tres0rApp.CSS` setzt es anders. App-Tasten gelten nicht in
+  `ModalScreen`s (nur `priority`-Tasten wie Strg+Q); Tasten, die ein fokussiertes `Input`
+  als Zeichen nimmt (`q`, `h`, `?`), gelten dort nicht, und die Fußzeile zeigt je Aktion
+  nur die erste nutzbare Taste (so erscheint `F1` statt `?`). Die Fußzeile schneidet
+  rechts ab: Test bei 80 Spalten.
 * **Qt:** `QLabel` deutet Text als HTML → `setTextFormat(Qt.PlainText)`;
   `adjustSize()` vergrößert sichtbare Dialoge nicht zuverlässig. Umbrechende Labels
   bekommen im Formular die Höhe ihrer *schmalen* Wunschbreite → Höhe nach dem Layout
   selbst setzen; vor `sizeHint()` des Fensters die innere Ebene zuerst `activate()`,
   sonst ist die Wunschhöhe veraltet (Dialog zu niedrig, Knöpfe verdecken Inhalt).
+  Schrift nie per Name („monospace“ gibt es unter macOS nicht – Qt sucht teuer Ersatz und
+  warnt), sondern `QFontDatabase.systemFont(FixedFont)`. Tastenkürzel in Texten per
+  `QKeySequence.toString(NativeText)` (unter macOS ⌘ statt Strg); `QKeySequence.Quit` ist
+  unter Windows leer.
   Objekte, die Qt übernimmt (etwa `QMimeData` aus `createMimeDataFromSelection`), nie in
   Python erzeugen, sondern das von `super()` anpassen – sonst Doppelfreigabe beim
   Prozessende: Segmentation fault *nach* bestandenen Tests. Deshalb bei pytest den
@@ -104,14 +118,19 @@ mit eigenem Index, Prüfung auf hängende Threads nach jedem Test),
 * **API-Schnappschuss/Doku:** Speicheradressen und `typing`-Darstellungen sind nicht
   stabil über Python-Versionen → normalisieren. groff warnt bei UTF-8 nicht immer →
   Manpage komplett als ASCII-Escapes.
+* **argparse** spricht englisch („usage:“, Fehlermeldungen) und beendet Bedienfehler mit
+  Exit 2 = bei tres0r „falsches Passwort“ → `cli._Parser` (Deutsch, Exit 1); docgen
+  streicht „Aufruf:“ aus der Manpage-Zeile.
 * **Header an Ort und Stelle** umschreiben (Anhängen) nur bei gleicher Länge (`with_flags`).
 * Die Sandbox, in der tres0r entstand, hatte **einen Kern**: Mehrkern-Gewinne sind
   dort nicht gemessen – auf echter Hardware mit `tres0r bench --throughput` prüfen.
 
 ## Offen
 
-* macOS: GUI und FUSE ungetestet (die CI-Jobs dort laufen ohne diese Extras).
-  `mount` ist nur für Linux und macOS vorgesehen.
+* macOS: FUSE ungetestet (die CI-Jobs dort laufen ohne GUI und FUSE). GUI und TUI von 1.2.0
+  hat Julian unter macOS Tahoe 26.7 gestartet und bedient – die Befunde (Schriftwarnung,
+  Fokus-Knopf, Scrollleiste, unsichtbarer Fortschrittsbalken) sind behoben, die Korrekturen
+  dort aber noch nicht von Hand bestätigt. `mount` ist nur für Linux und macOS vorgesehen.
 * GUI auf echten Desktops: Julian hat sie von Hand ausprobiert – 1.0 unter Debian 13
   (seine Befunde → 1.1.0) und 1.0.1 von PyPI unter Windows Server 2025, beides lief.
   Nicht gezielt geprüft: X11/Wayland, Themes, HiDPI, Drag & Drop, Dateidialoge.

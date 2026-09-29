@@ -9,7 +9,7 @@ pytest.importorskip("textual")
 
 from textual.widgets import Input, Label, Static, Switch, Tree  # noqa: E402
 
-from tres0r import container, passgen, tui  # noqa: E402
+from tres0r import container, keys, passgen, tui  # noqa: E402
 from tres0r.errors import Cancelled, HibpUnavailable, WrongPassword  # noqa: E402
 from tres0r.kdf import LEVELS  # noqa: E402
 
@@ -53,10 +53,10 @@ def project(tmp_path):
     return root
 
 
-def run(scenario, start):
+def run(scenario, start, size=(120, 40)):
     async def main():
         app = tui.Tres0rApp(start)
-        async with app.run_test(size=(120, 40)) as pilot:
+        async with app.run_test(size=size) as pilot:
             await scenario(app, pilot)
     asyncio.run(main())
 
@@ -129,9 +129,13 @@ def test_pack_with_password(project, tmp_path):
         app.screen.query_one("#confirm", Input).value = PASSWORD
         await pilot.pause(CLICK_PAUSE)
         await click(app, pilot, "#start")
+        messages = []
+        app.notify = lambda message, **kwargs: messages.append(message)
         outcome = await finish_progress(app, pilot)
-        assert "3 Einträge" in outcome or "Einträge" in outcome
+        # Wunsch nach dem Test unter macOS: Erfolg eindeutig – eigene grüne Kopfzeile mit ✓
+        assert outcome.startswith("✓ Erfolgreich gepackt\n") and "Einträge" in outcome
         await until(pilot, lambda: not isinstance(app.screen, tui.PackScreen))
+        await until(pilot, lambda: any(m.startswith("✓ Erfolgreich gepackt: ") for m in messages))
     run(scenario, tmp_path)
     out = tmp_path / "Projekt.tres0r"
     assert container.verify(out, PASSWORD).files == 2
@@ -674,7 +678,9 @@ def test_key_management(project, tmp_path):
         await finish_progress(app, pilot)
         await showing(app, pilot, tui.SecretsScreen)
         phrase = app.screen.items[0][1]
-        assert phrase in text(app, "#secrets")
+        shown = tui.SecretsScreen.readable(phrase)  # Wörter mit Leerzeichen: bricht nur zwischen Wörtern um
+        assert shown in text(app, "#secrets") and "-" not in shown
+        assert keys.canonical_secret(shown) == keys.canonical_secret(phrase)
         await click(app, pilot, "#save")
         await showing(app, pilot, tui.PathScreen)
         app.screen.query_one("#path", Input).value = str(saved)
@@ -807,3 +813,185 @@ def test_error_texts_are_readable():
     assert tui._describe_error(PermissionError(13, "Keine Berechtigung", "/ziel")) == "Keine Berechtigung: /ziel"
     assert tui._describe_error(OSError("kaputt")) == "kaputt"
     assert tui._describe_error(ValueError("x")).startswith("Unerwarteter Fehler")
+
+
+# --- Erfolg, Hilfe und Beenden, Darstellung (Wünsche und Befunde aus dem Test unter macOS) ------------
+def test_success_is_unmistakable_and_the_bar_is_visible(project, tmp_path):
+    """Bildschirmfoto nach dem Packen: nur „100%“, der Balken selbst fehlte – die ID "bar" traf auch
+    Textuals inneren Balken, dessen Rand schob ihn aus der einzeiligen Leiste. Und der Erfolg war von
+    den Fortschrittszeilen nicht zu unterscheiden."""
+    out = tmp_path / "p.tres0r"
+
+    async def scenario(app, pilot):
+        app.push_screen(tui.ProgressScreen(
+            "Packen", lambda monitor: container.create([project], out, PASSWORD, FAST, progress=monitor),
+            lambda r: f"{r.path} – {r.entries} Einträge", "Erfolgreich gepackt"))
+        await until(pilot, lambda: isinstance(app.screen, tui.ProgressScreen) and app.screen.is_finished)
+        screen = app.screen
+        assert text(app, "#outcome").startswith("✓ Erfolgreich gepackt\n")
+        assert screen.query_one("#box").has_class("-ok")
+        # „Verschlüssele …“ und die letzte Datei sind überholt
+        assert not screen.query_one("#phase").display and not screen.query_one("#item").display
+        bar = screen.query_one("#progress").query_one("Bar")  # Textuals innerer Balken (per Typname)
+        await until(pilot, lambda: screen.get_widget_at(bar.region.x, bar.region.y)[0] is bar)
+        assert "━" in app.export_screenshot()
+    run(scenario, tmp_path)
+
+
+def test_failure_and_cancel_are_marked_and_escape_works(tmp_path):
+    """Fehler rot mit ✗, Abbruch gelb; Esc bricht eine laufende Aufgabe ab und schließt danach."""
+    stopped = []
+
+    def wrong(monitor):
+        raise WrongPassword("Falsches Passwort oder falscher Schlüssel.")
+
+    def endless(monitor):
+        try:
+            while True:
+                monitor.cancel.check()
+                time.sleep(0.01)
+        except Cancelled:
+            stopped.append(True)
+            raise
+
+    async def scenario(app, pilot):
+        app.push_screen(tui.ProgressScreen("Öffnen", wrong, str, "Erfolgreich geöffnet"))
+        await until(pilot, lambda: isinstance(app.screen, tui.ProgressScreen) and app.screen.is_finished)
+        assert text(app, "#outcome").startswith("✗ Fehlgeschlagen: Falsches Passwort")
+        assert app.screen.query_one("#box").has_class("-failed")
+        assert not app.screen.query_one("#progress").display  # unbestimmt: nicht weiterwandern lassen
+        await pilot.press("escape")  # schließt wie „Schließen“
+        await until(pilot, lambda: not isinstance(app.screen, tui.ProgressScreen))
+        app.push_screen(tui.ProgressScreen("Packen", endless, str, "Erfolgreich gepackt"))
+        await showing(app, pilot, tui.ProgressScreen)
+        await pilot.press("escape")  # bricht ab
+        await until(pilot, lambda: app.screen.is_finished)
+        assert stopped == [True] and text(app, "#outcome").startswith("Abgebrochen – nichts wurde verändert")
+        assert app.screen.query_one("#box").has_class("-cancelled")
+    run(scenario, tmp_path)
+
+
+def test_help_with_question_mark_h_and_f1(project, tmp_path):
+    """Wunsch nach dem Test unter macOS: Hilfe „für doofe“ – ?, h und F1 öffnen sie, Esc oder dieselbe
+    Taste schließt sie. Sie nennt die Tasten der Ansicht darunter, auch ausgeblendete wie r."""
+    async def scenario(app, pilot):
+        app.select(project)
+        for key in ("question_mark", "h", "f1"):
+            await pilot.press(key)
+            await showing(app, pilot, tui.HelpScreen)
+            shown = dict(app.screen.rows())
+            assert shown["p"].startswith("Datei oder Ordner") and "r" in shown and "q" not in shown
+            await pilot.press("escape" if key == "question_mark" else key)
+            await showing(app, pilot, tui.MainScreen)
+        assert "Hilfe" in text(app, "#details") and "beenden" in text(app, "#details")
+    run(scenario, tmp_path)
+
+
+def test_q_quits_but_is_a_letter_in_input_fields(project, tmp_path):
+    """q beendet. In Eingabefeldern sind q, h und ? Zeichen – deshalb liegt beim Packen der Fokus gleich
+    im Passwortfeld (vorher auf dem Formular: ein q am Anfang des Passworts hätte tres0r beendet)."""
+    async def scenario(app, pilot):
+        quits = []
+        app.exit = lambda *args, **kwargs: quits.append(True)
+        try:
+            app.select(project)
+            await pilot.press("p")
+            await showing(app, pilot, tui.PackScreen)
+            assert app.focused.id == "password"
+            await pilot.press("q", "h", "question_mark")
+            assert app.screen.query_one("#password", Input).value == "qh?" and not quits
+            await pilot.press("f1")  # Hilfe geht auch beim Tippen
+            await showing(app, pilot, tui.HelpScreen)
+            await pilot.press("escape")
+            await showing(app, pilot, tui.PackScreen)
+            await pilot.press("escape")
+            await showing(app, pilot, tui.MainScreen)
+            await pilot.press("q")
+            assert quits == [True]
+        finally:
+            del app.exit
+    run(scenario, tmp_path)
+
+
+def test_footer_fits_80_columns_with_help_and_quit_first(project, tmp_path):
+    """Textual schneidet die Fußzeile rechts ab: Hilfe und Beenden stehen vorn, und bei 80 Spalten
+    passt jede Ansicht ganz hinein (die Schlüsselansicht war schon vorher zu breit)."""
+    from textual.widgets import Footer
+    out = container.create([project], tmp_path / "f.tres0r", PASSWORD, FAST).path
+
+    async def footer_shows(app, pilot, screen_type, expected_start):
+        await showing(app, pilot, screen_type)
+
+        def keys_shown():
+            return [(k.key_display, k.description) for k in app.screen.query_one(Footer).query("FooterKey")]
+        await until(pilot, lambda: keys_shown()[:len(expected_start)] == expected_start)
+        keys = list(app.screen.query_one(Footer).query("FooterKey"))
+        assert all(k.region.right <= 80 for k in keys), [(k.description, k.region) for k in keys]
+
+    async def scenario(app, pilot):
+        app.select(out)
+        await footer_shows(app, pilot, tui.MainScreen, [("?", "Hilfe"), ("q", "Beenden")])
+        await pilot.press("o")
+        await unlock(app, pilot)
+        await finish_progress(app, pilot)
+        await footer_shows(app, pilot, tui.BrowseScreen, [("?", "Hilfe"), ("q", "Beenden")])
+        await pilot.press("escape")
+        await pilot.press("k")
+        await unlock(app, pilot)
+        await finish_progress(app, pilot)
+        await footer_shows(app, pilot, tui.KeysScreen, [("?", "Hilfe"), ("q", "Beenden")])
+        await pilot.press("escape")
+        app.select(project)
+        await pilot.press("p")  # im Passwortfeld: F1 statt ?, kein q
+        await footer_shows(app, pilot, tui.PackScreen, [("F1", "Hilfe"), ("esc", "Zurück")])
+    run(scenario, tmp_path, size=(80, 24))
+
+
+def test_ctrl_c_explains_quitting_in_german(tmp_path):
+    """Strg+C beendet Textual-Programme nicht – der Hinweis dazu kam auf Englisch."""
+    async def scenario(app, pilot):
+        messages = []
+        app.notify = lambda message, **kwargs: messages.append(message)
+        await pilot.press("ctrl+c")
+        await until(pilot, lambda: bool(messages))
+        assert messages[0].startswith("Beenden mit q") and "Strg+Q" in messages[0]
+    run(scenario, tmp_path)
+
+
+def test_look_findings_from_macos(project, tmp_path):
+    """Bildschirmfotos unter macOS (Tahoe 26.7): Der Knopf mit dem Fokus hatte einen weißen Kasten
+    (Textual invertiert die Beschriftung), die Scrollleiste eine schwarze Spur neben dem grauen
+    Dateibaum, Fenster reichten bis zum Bildschirmrand, die Trennlinie der Details war nur so hoch
+    wie ihr Text."""
+    from textual.color import Color
+
+    async def scenario(app, pilot):
+        app.select(project)
+        files, details = app.screen.query_one("#files"), app.screen.query_one("#details")
+        assert files.styles.scrollbar_background == Color.parse(app.get_css_variables()["surface"])
+        assert details.region.height == files.region.height
+        app.push_screen(tui.ConfirmScreen("Wirklich?"))
+        await showing(app, pilot, tui.ConfirmScreen)
+        yes = app.screen.query_one("#yes")
+        yes.focus()
+        await until(pilot, lambda: bool(yes.styles.text_style.underline))
+        assert not yes.styles.text_style.reverse
+        assert app.screen.query_one("#box").region.height < 15  # kompakt – der Bildschirm hat 40 Zeilen
+    run(scenario, tmp_path)
+
+
+def test_recovery_phrase_wraps_only_between_words(tmp_path):
+    """Die Phrase brach bei 80 Spalten mitten im Wort um ("vertiefe⏎n-strom") – beim Abschreiben
+    eine Falle. Jetzt wie in der GUI: Leerzeichen zwischen den Wörtern (entsperrt genauso)."""
+    from textual.geometry import Region
+    phrase = keys.generate_recovery().value
+
+    async def scenario(app, pilot):
+        app.push_screen(tui.SecretsScreen("Wiederherstellungsphrase", [("Phrase", phrase)]))
+        await showing(app, pilot, tui.SecretsScreen)
+        widget = app.screen.query_one("#secrets")
+        await until(pilot, lambda: widget.size.height > 2)
+        lines = [strip.text for strip in widget.render_lines(Region(0, 0, widget.size.width, widget.size.height))]
+        assert [word for line in lines for word in line.split()] == ["Phrase:"] + phrase.split("-")
+    run(scenario, tmp_path, size=(80, 24))
+
