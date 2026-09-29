@@ -9,7 +9,7 @@ was getestet ist, was nicht, und Funde offen benennen.
 Verschlüsselte Container für Dateien/Ordner/Datenströme: Argon2id + ChaCha20-Poly1305
 (STREAM, 64-KiB-Chunks), bis zu 16 Keyslots, Ed25519-Signaturen, tar mit
 Inhaltsverzeichnis, optional zstd. CLI, TUI (Textual), GUI (PySide6). Stand:
-1.2.0 (`pyproject.toml`), Lizenz MIT. Paketname auf PyPI: `tres0r-crypt` (`tres0r`
+1.3.0 (`pyproject.toml`), Lizenz MIT. Paketname auf PyPI: `tres0r-crypt` (`tres0r`
 lehnt PyPI als zu ähnlich zu `tresor` ab) – Import und Befehl bleiben `tres0r`.
 
 ## Aufbau
@@ -129,8 +129,9 @@ mit eigenem Index, Prüfung auf hängende Threads nach jedem Test),
 
 * macOS: FUSE ungetestet (die CI-Jobs dort laufen ohne GUI und FUSE). GUI und TUI von 1.2.0
   hat Julian unter macOS Tahoe 26.7 gestartet und bedient – die Befunde (Schriftwarnung,
-  Fokus-Knopf, Scrollleiste, unsichtbarer Fortschrittsbalken) sind behoben, die Korrekturen
-  dort aber noch nicht von Hand bestätigt. `mount` ist nur für Linux und macOS vorgesehen.
+  Fokus-Knopf, Scrollleiste, unsichtbarer Fortschrittsbalken) sind in 1.3.0 behoben, die
+  Korrekturen dort aber noch nicht von Hand bestätigt, ebenso wenig Erfolgsmeldungen und
+  Hilfe/Beenden aus 1.3.0. `mount` ist nur für Linux und macOS vorgesehen.
 * GUI auf echten Desktops: Julian hat sie von Hand ausprobiert – 1.0 unter Debian 13
   (seine Befunde → 1.1.0) und 1.0.1 von PyPI unter Windows Server 2025, beides lief.
   Nicht gezielt geprüft: X11/Wayland, Themes, HiDPI, Drag & Drop, Dateidialoge.
