@@ -19,7 +19,7 @@ from pathlib import Path
 from typing import Callable
 
 from PySide6.QtCore import QDir, QLibraryInfo, QLocale, QMimeData, QObject, Qt, QTranslator, Signal, Slot
-from PySide6.QtGui import QAction, QFont, QKeySequence
+from PySide6.QtGui import QAction, QFontDatabase, QKeySequence
 from PySide6.QtWidgets import (QAbstractItemView, QApplication, QCheckBox, QComboBox, QDialog, QDialogButtonBox,
                                QFileDialog, QFileSystemModel, QFormLayout, QGridLayout, QHBoxLayout, QHeaderView,
                                QInputDialog, QLabel, QLineEdit, QMainWindow, QMessageBox, QPlainTextEdit, QProgressBar,
@@ -38,6 +38,10 @@ def _size(n: int | None) -> str:
     return "–" if n is None else container.format_size(n)
 
 
+def _slots_text(added: list[int]) -> str:
+    return f"Slot {', '.join(map(str, added))}"
+
+
 def _exact(name: str) -> str:
     """Eintragsname als ``only``-Muster, das genau ihn trifft: ``only`` sind fnmatch-Muster –
     "Urlaub [2019].jpg" passte sonst auf "Urlaub 2.jpg" (und "*" auf fremde Einträge)."""
@@ -53,6 +57,19 @@ def describe_error(error: BaseException) -> str:
         where = f": {error.filename}" if error.filename else ""
         return f"{error.strerror or error}{where}"
     return f"Unerwarteter Fehler: {error!r}"
+
+
+def _fixed_font():
+    """Festbreitenschrift der Plattform (Menlo, Consolas, DejaVu Sans Mono …). Ein fester Name
+    wie "monospace" existiert unter macOS nicht – Qt sucht dann teuer nach Ersatz und warnt
+    („Populating font family aliases took … ms“, gemeldet unter macOS Tahoe 26.7)."""
+    return QFontDatabase.systemFont(QFontDatabase.FixedFont)
+
+
+def _shortcut_text(sequence: str) -> str:
+    """Tastenkürzel, wie die Plattform es schreibt: ⌘P unter macOS (Qt legt Ctrl dort auf die
+    Befehlstaste), sonst Strg+P bzw. Ctrl+P je nach Übersetzung – fest „Strg+P“ war unter macOS falsch."""
+    return QKeySequence(sequence).toString(QKeySequence.NativeText)
 
 
 def _plain(label: QLabel) -> QLabel:
@@ -89,9 +106,13 @@ class _Task(QObject):
 
 
 class ProgressDialog(QDialog):
-    """Führt eine Aufgabe aus; schließt sich danach selbst (Ergebnis bzw. Fehler in Attributen)."""
+    """Führt eine Aufgabe aus (Ergebnis bzw. Fehler in Attributen). Ohne ``success`` schließt es
+    sich danach selbst. Mit ``success`` bleibt es offen und meldet den Erfolg eindeutig: grüne
+    Kopfzeile mit ✓, darunter ``summary(ergebnis)``, dann „Schließen“ – wie die TUI. Vorher stand
+    der Erfolg nur zehn Sekunden in der Statuszeile (Wunsch nach dem Test unter macOS)."""
 
-    def __init__(self, parent: QWidget | None, title: str, job: Callable[[Monitor], object]) -> None:
+    def __init__(self, parent: QWidget | None, title: str, job: Callable[[Monitor], object],
+                 success: str | None = None, summary: Callable[[object], str] | None = None) -> None:
         super().__init__(parent)
         self.setWindowTitle(title)
         self.setMinimumWidth(520)
@@ -99,15 +120,21 @@ class ProgressDialog(QDialog):
         self.result_value: object = None
         self.error: BaseException | None = None
         self.running = True
+        self.success, self.summary = success, summary
         layout = QVBoxLayout(self)
         self.bar = QProgressBar()
         self.bar.setRange(0, 0)  # unbestimmt, bis die Gesamtgröße bekannt ist
         self.phase = _plain(QLabel("Starte …"))
         self.item = _plain(QLabel(""))
+        self.headline = _plain(QLabel(""))
+        self.headline.setStyleSheet("color: #2e8b57; font-weight: bold;")  # auf hellem und dunklem Grund lesbar
+        self.outcome = _plain(QLabel(""))
         self.cancel_button = QPushButton("Abbrechen")
         self.cancel_button.clicked.connect(self.cancel)
-        for widget in (self.bar, self.phase, self.item, self.cancel_button):
+        for widget in (self.bar, self.phase, self.item, self.headline, self.outcome, self.cancel_button):
             layout.addWidget(widget)
+        self.headline.hide()
+        self.outcome.hide()
         self.task = _Task(job, self.token)
         self.task.progress.connect(self._show)
         self.task.done.connect(self._done)
@@ -145,7 +172,25 @@ class ProgressDialog(QDialog):
     @Slot(object)
     def _done(self, result: object) -> None:
         self.running, self.result_value = False, result
-        self.accept()
+        if self.success is None:
+            self.accept()
+            return
+        self.bar.setRange(0, 1000)
+        self.bar.setValue(1000)
+        self.phase.hide()  # „Verschlüssele …“ und die letzte Datei sind jetzt überholt
+        self.item.hide()
+        self.headline.setText(f"✓ {self.success}")
+        self.headline.show()
+        self.outcome.setText(self.summary(result) if self.summary is not None else "")
+        self.outcome.setVisible(bool(self.outcome.text()))
+        self.cancel_button.setText("Schließen")
+        self.cancel_button.setEnabled(True)
+        self.cancel_button.setDefault(True)
+        self.cancel_button.setFocus()
+        # umbrochene Zusammenfassung ganz zeigen: innere Ebene zuerst, dann die Höhe für diese Breite
+        self.layout().activate()
+        needed = self.layout().totalHeightForWidth(self.width())
+        self.resize(self.width(), max(self.height(), needed if needed > 0 else self.sizeHint().height()))
 
     @Slot(object)
     def _failed(self, error: BaseException) -> None:
@@ -157,6 +202,8 @@ class ProgressDialog(QDialog):
             self.token.cancel()
             self.phase.setText("Breche ab …")
             self.cancel_button.setEnabled(False)
+        elif self.error is None:  # Erfolg angezeigt: der Knopf heißt jetzt „Schließen“
+            self.accept()
 
     def reject(self) -> None:  # Esc/Fenster schließen = abbrechen, nicht verlassen
         self.cancel()
@@ -175,7 +222,7 @@ class SecretView(QPlainTextEdit):
     def __init__(self) -> None:
         super().__init__()
         self.setReadOnly(True)
-        self.setFont(QFont("monospace"))
+        self.setFont(_fixed_font())
         self.setLineWrapMode(QPlainTextEdit.NoWrap)  # umbrochen wird nur an unseren Stellen
         self.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         self.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
@@ -484,7 +531,7 @@ class SecretsDialog(QDialog):
         layout.addWidget(_plain(QLabel(f"{title} – nur jetzt sichtbar, bitte sicher notieren oder speichern.")))
         self.text = QPlainTextEdit()
         self.text.setReadOnly(True)
-        self.text.setFont(QFont("monospace"))
+        self.text.setFont(_fixed_font())
         self.text.setPlainText("\n\n".join(f"{label}:\n{self.readable(value)}" for label, value in items))
         layout.addWidget(self.text)
         self.saved_note = _plain(QLabel(""))
@@ -618,14 +665,16 @@ class BrowseWindow(QWidget):
         if dest is None:
             return
         result = self.main.run_task("Entpacken", lambda m: container.extract(
-            self.path, dest, self.credentials, progress=m, only=only))
+            self.path, dest, self.credentials, progress=m, only=only),
+            "Erfolgreich entpackt", lambda r: f"{r.entries} Einträge nach {dest}")
         if result is not None:
-            self.main.show_info(f"{result.entries} Einträge nach {dest} entpackt.")
+            self.main.show_info(f"✓ Erfolgreich entpackt: {result.entries} Einträge nach {dest}")
 
     def verify(self) -> None:
-        result = self.main.run_task("Prüfen", lambda m: container.verify(self.path, self.credentials, progress=m))
+        result = self.main.run_task("Prüfen", lambda m: container.verify(self.path, self.credentials, progress=m),
+                                    "Prüfung erfolgreich", self.main.verified_text)
         if result is not None:
-            self.main.show_info(self.main.verified_text(result))
+            self.main.show_info(f"✓ Prüfung erfolgreich – {self.main.verified_text(result)}")
 
 
 class KeysDialog(QDialog):
@@ -662,8 +711,8 @@ class KeysDialog(QDialog):
             for column, text in enumerate((str(slot.index), slot.description)):
                 self.table.setItem(row, column, QTableWidgetItem(text))  # reiner Text
 
-    def _run(self, title: str, job) -> object:
-        result = self.main.run_task(title, job)
+    def _run(self, title: str, job, success: str, summary: Callable[[object], str] | None = None) -> object:
+        result = self.main.run_task(title, job, success, summary)
         self.refresh()
         return result
 
@@ -691,12 +740,14 @@ class KeysDialog(QDialog):
                 self.path, self.credentials, password=new["password"],
                 # gleiche Stufe wie das vorhandene Passwort – ein schwächerer Slot senkt den Schutz
                 params=self.info.kdf or LEVELS["normal"],
-                keyfile=new["keyfile"], fido2=new["fido2"], progress=m))
+                keyfile=new["keyfile"], fido2=new["fido2"], progress=m),
+                "Passwort hinzugefügt", _slots_text)
 
     def add_recovery(self) -> None:
         phrase = keys.generate_recovery().value
         if self._run("Phrase hinzufügen", lambda m: container.add_keys(
-                self.path, self.credentials, recovery=phrase, progress=m)) is not None:
+                self.path, self.credentials, recovery=phrase, progress=m),
+                "Wiederherstellungsphrase hinzugefügt", _slots_text) is not None:
             self.main.run_dialog(SecretsDialog(self, "Wiederherstellungsphrase", [("Phrase", phrase)]))
 
     def add_recipient(self) -> None:
@@ -709,7 +760,7 @@ class KeysDialog(QDialog):
             self.main.show_error(str(e))
             return
         self._run("Empfänger hinzufügen", lambda m: container.add_keys(
-            self.path, self.credentials, recipients=[recipient], progress=m))
+            self.path, self.credentials, recipients=[recipient], progress=m), "Empfänger hinzugefügt", _slots_text)
 
     def add_shares(self) -> None:
         text = self.main.ask_text("Wie viele Anteile, wie viele davon nötig? (K/N, z. B. 2/3)", "2/3")
@@ -723,7 +774,7 @@ class KeysDialog(QDialog):
             self.main.show_error("Bitte K/N angeben, z. B. 2/3 (2 ≤ K ≤ N ≤ 32).")
             return
         result = self._run("Anteile hinzufügen", lambda m: container.add_threshold(
-            self.path, self.credentials, k, n, progress=m))
+            self.path, self.credentials, k, n, progress=m), "Anteile hinzugefügt", lambda r: f"Slot {r[0]}")
         if result is not None:
             self.main.run_dialog(SecretsDialog(self, f"Anteile ({k} von {n} nötig)",
                                                [(share.label, share.text()) for share in result[1]]))
@@ -734,10 +785,11 @@ class KeysDialog(QDialog):
             return
         # change_password gibt nichts zurück – "True" markiert den Erfolg
         if self._run("Passwort ändern", lambda m: container.change_password(
-                self.path, self.credentials, new["password"], progress=m) or True):
+                self.path, self.credentials, new["password"], progress=m) or True,
+                "Passwort geändert", lambda _r: "Ein zweiter Faktor bleibt bestehen."):
             self.credentials = keys.Credentials(passwords=[new["password"]], keyfiles=self.credentials.keyfiles,
                                                 fido2=self.credentials.fido2)
-            self.main.show_info("Passwort geändert (ein zweiter Faktor bleibt bestehen).")
+            self.main.show_info("✓ Passwort geändert (ein zweiter Faktor bleibt bestehen).")
 
     def remove(self) -> None:
         row = self.table.currentRow()
@@ -751,7 +803,8 @@ class KeysDialog(QDialog):
         if self.main.confirm(f"Slot {slot.index} ({slot.description}) wirklich entfernen? "
                              "Wer nur diesen Schlüssel hat, kommt danach nicht mehr an den Inhalt."):
             self._run("Schlüssel entfernen", lambda m: container.remove_key(
-                self.path, self.credentials, slot.index, progress=m))
+                self.path, self.credentials, slot.index, progress=m),
+                "Schlüssel entfernt", lambda removed: f"Entfernt: {removed.description}")
 
 
 class DiffDialog(QDialog):
@@ -777,6 +830,56 @@ class DiffDialog(QDialog):
         buttons = QDialogButtonBox(QDialogButtonBox.Close)
         buttons.rejected.connect(self.reject)
         layout.addWidget(buttons)
+
+
+class HelpDialog(QDialog):
+    """Kurzanleitung: was wohin führt, dazu die Tastenkürzel dieser Plattform – aus den Aktionen
+    gelesen, also unter macOS mit ⌘ und immer passend zu dem, was die Tasten tun."""
+
+    TEXT = ("tres0r verschlüsselt Dateien und Ordner in Container (Endung .tres0r).\n\n"
+            "Verschlüsseln: links eine Datei oder einen Ordner wählen (oder ins Fenster ziehen), dann "
+            "„Packen …“. Das Original bleibt, wie es ist.\n\n"
+            "Einen Container wählen, dann: Öffnen (Inhalt ansehen und entpacken, auch per Doppelklick), "
+            "Prüfen, Anhängen, Vergleichen (mit Dateien auf der Platte) oder Schlüssel (Passwörter, "
+            "Wiederherstellungsphrase …).\n\n"
+            "Ohne das Passwort kommt niemand mehr an den Inhalt – auch nicht mit tres0r.")
+
+    WIDTH = 560
+
+    def __init__(self, main: MainWindow) -> None:
+        super().__init__(main)
+        self.setWindowTitle("tres0r – Kurzanleitung")
+        layout = QVBoxLayout(self)
+        layout.addWidget(_plain(QLabel(self.TEXT)))
+        layout.addSpacing(8)
+        heading = QLabel("Tastenkürzel")
+        heading.setTextFormat(Qt.PlainText)
+        font = heading.font()
+        font.setBold(True)
+        heading.setFont(font)
+        layout.addWidget(heading)
+        # nur das Hauptkürzel: unter Linux kennt Qt für die Hilfe zusätzlich eine eigene Help-Taste
+        actions = [*main.actions_by_name.values(), main.menu_actions["help"], main.menu_actions["quit"]]
+        self.rows = [(action.text().rstrip(" …"), action.shortcut().toString(QKeySequence.NativeText))
+                     for action in actions]
+        self.rows.append(("Abbrechen, Fenster schließen", _shortcut_text("Esc")))
+        grid = QGridLayout()
+        for row, (what, shortcut) in enumerate(self.rows):
+            for column, text in enumerate((what, shortcut)):
+                label = QLabel(text)
+                label.setTextFormat(Qt.PlainText)
+                grid.addWidget(label, row, column)
+        grid.setColumnStretch(1, 1)
+        grid.setHorizontalSpacing(24)
+        layout.addLayout(grid)
+        buttons = QDialogButtonBox(QDialogButtonBox.Close)
+        buttons.rejected.connect(self.reject)
+        layout.addWidget(buttons)
+        # Der umbrechende Text bekäme sonst die Höhe seiner schmalen Wunschbreite – das Fenster wäre
+        # zu hoch, der Rest verteilte sich als Lücken (Stolperfalle aus CLAUDE.md): Höhe für die Breite.
+        layout.activate()
+        needed = layout.totalHeightForWidth(self.WIDTH)
+        self.resize(self.WIDTH, needed if needed > 0 else self.sizeHint().height())
 
 
 # ---------------------------------------------------------------------------
@@ -844,8 +947,45 @@ class MainWindow(QMainWindow):
             action.triggered.connect(getattr(self, name))
             toolbar.addAction(action)
             self.actions_by_name[name] = action
+        self._build_menus()
         self.statusBar().showMessage(f"Ordner: {self.start}")
         self._update_actions()
+
+    def _build_menus(self) -> None:
+        """Menüleiste mit Hilfe und Beenden (Wunsch nach dem Test unter macOS: beides „für doofe“) –
+        mit den Kürzeln der Plattform: Beenden Strg+Q bzw. ⌘Q (Windows kennt keins, dort Strg+Q),
+        Hilfe F1 bzw. ⌘?. Unter macOS wandern „Beenden“ und „Über“ ins Programmmenü."""
+        menu = self.menuBar().addMenu("&Datei")
+        for name in ("pack", "open", "verify", "append", "diff", "keys"):
+            menu.addAction(self.actions_by_name[name])
+        menu.addSeparator()
+        quit_action = QAction("Beenden", self)
+        quit_action.setShortcuts(QKeySequence.keyBindings(QKeySequence.Quit) or [QKeySequence("Ctrl+Q")])
+        quit_action.setMenuRole(QAction.QuitRole)
+        quit_action.triggered.connect(self.close)
+        menu.addAction(quit_action)
+        help_menu = self.menuBar().addMenu("&Hilfe")
+        guide = QAction("Kurzanleitung", self)
+        guide.setShortcuts(QKeySequence.keyBindings(QKeySequence.HelpContents) or [QKeySequence("F1")])
+        guide.triggered.connect(self.show_help)
+        help_menu.addAction(guide)
+        about = QAction("Über tres0r", self)
+        about.setMenuRole(QAction.AboutRole)
+        about.triggered.connect(self.show_about)
+        help_menu.addAction(about)
+        self.menu_actions = {"quit": quit_action, "help": guide, "about": about}  # immer verfügbar
+        self.help_keys = guide.shortcut().toString(QKeySequence.NativeText)  # für Hinweistexte
+
+    def show_help(self) -> None:
+        self.run_dialog(HelpDialog(self))
+
+    def show_about(self) -> None:
+        from . import __version__
+        box = QMessageBox(QMessageBox.Information, "Über tres0r",
+                          f"tres0r {__version__}\n\nVerschlüsselte Container für Dateien und Ordner: Argon2id, "
+                          "ChaCha20-Poly1305, Ed25519-Signaturen.\n\nLizenz: MIT", parent=self)
+        box.setTextFormat(Qt.PlainText)
+        self.run_dialog(box)
 
     # -- Dialoge und Meldungen (in Tests ersetzbar) ------------------------------
     def run_dialog(self, dialog: QDialog) -> bool:
@@ -897,9 +1037,11 @@ class MainWindow(QMainWindow):
         return pin if ok and pin else None
 
     # -- Hintergrundarbeit ------------------------------------------------------
-    def run_task(self, title: str, job: Callable[[Monitor], object]) -> object:
-        """Aufgabe mit Fortschrittsdialog; Ergebnis oder None (Fehler wurde gemeldet)."""
-        dialog = ProgressDialog(self, title, job)
+    def run_task(self, title: str, job: Callable[[Monitor], object], success: str | None = None,
+                 summary: Callable[[object], str] | None = None) -> object:
+        """Aufgabe mit Fortschrittsdialog; Ergebnis oder None (Fehler wurde gemeldet). Mit ``success``
+        meldet der Dialog den Erfolg und bleibt offen, bis man ihn schließt (``ProgressDialog``)."""
+        dialog = ProgressDialog(self, title, job, success, summary)
         self.run_dialog(dialog)
         if dialog.error is not None:
             error = dialog.error
@@ -964,7 +1106,8 @@ class MainWindow(QMainWindow):
         if self.info is None:
             kind = "Ordner" if path.is_dir() else "Datei"
             size = "" if path.is_dir() else f"\nGröße: {_size(path.stat().st_size)}" if path.exists() else ""
-            self.details.setText(f"{kind}{size}\n\nPacken mit Strg+P – oder in das Fenster ziehen.")
+            self.details.setText(f"{kind}{size}\n\nPacken mit {_shortcut_text('Ctrl+P')} – oder in das Fenster "
+                                 f"ziehen. Hilfe: {self.help_keys}")
         else:
             info = self.info
             lines = [f"tres0r-Container, Format v{info.version}", f"Größe: {_size(info.size)}",
@@ -1054,9 +1197,11 @@ class MainWindow(QMainWindow):
             params = calibrate() if level == "auto" else LEVELS[level]
             extra = {"fido2": fido2} if fido2 is not None else {}
             return container.create(sources, output, password, params, compress=compress, progress=monitor, **extra)
-        result = self.run_task("Packen", job)
+        result = self.run_task("Packen", job, "Erfolgreich gepackt",
+                               lambda r: f"{r.path} – {_size(r.size)}, {r.entries} Einträge")
         if result is not None:
-            self.show_info(f"Gepackt: {result.path} – {_size(result.size)}, {result.entries} Einträge")
+            self.show_info(f"✓ Erfolgreich gepackt: {result.path} – {_size(result.size)}, "
+                           f"{result.entries} Einträge")
             self.select(result.path)
 
     def open(self) -> None:
@@ -1082,9 +1227,10 @@ class MainWindow(QMainWindow):
             return
         path, credentials = self.info.path, self._credentials()
         if credentials is not None:
-            result = self.run_task("Prüfen", lambda m: container.verify(path, credentials, progress=m))
+            result = self.run_task("Prüfen", lambda m: container.verify(path, credentials, progress=m),
+                                   "Prüfung erfolgreich", self.verified_text)
             if result is not None:
-                self.show_info(self.verified_text(result))
+                self.show_info(f"✓ Prüfung erfolgreich – {self.verified_text(result)}")
 
     def append(self) -> None:
         if self.info is None:
@@ -1096,9 +1242,12 @@ class MainWindow(QMainWindow):
         credentials = self._credentials()
         if credentials is None:
             return
-        result = self.run_task("Anhängen", lambda m: container.append(path, sources, credentials, progress=m))
+        result = self.run_task("Anhängen", lambda m: container.append(path, sources, credentials, progress=m),
+                               "Erfolgreich angehängt",
+                               lambda r: f"Segment {r.segment}: {r.entries} Einträge, +{_size(r.added)}")
         if result is not None:
-            self.show_info(f"Segment {result.segment} angehängt: {result.entries} Einträge, +{_size(result.added)}")
+            self.show_info(f"✓ Erfolgreich angehängt: Segment {result.segment}, {result.entries} Einträge, "
+                           f"+{_size(result.added)}")
             self.select(path)
 
     def diff(self) -> None:

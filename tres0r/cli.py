@@ -33,6 +33,7 @@ import argparse
 import getpass
 import json
 import os
+import re
 import secrets as _random
 import shutil
 import sys
@@ -661,7 +662,7 @@ def cmd_pack(args: argparse.Namespace, ui: Ui) -> int:
         ui.end_progress()
     level = f", Stufe {args.level}" if setup["password"] is not None else ""
     shown = volumes.display_name(result.path) if split else str(result.path)
-    ui.out(f"{shown}  ({fmt(result.size)}, {result.entries} Einträge{level})")
+    ui.out(f"Erfolgreich gepackt: {shown}  ({fmt(result.size)}, {result.entries} Einträge{level})")
     _deliver_shares(ui, result.shares, args.shares_dir, args.yes)
     ui.data.update(path=str(result.path), size=result.size, entries=result.entries,
                    level=args.level if setup["password"] is not None else None, compressed=args.compress,
@@ -724,6 +725,7 @@ def cmd_unpack(args: argparse.Namespace, ui: Ui) -> int:
     ui.data.update(dest=str(Path(args.output)), names=result.names, entries=result.entries,
                    renamed=[{"from": old, "to": new} for old, new in result.renamed])
     _report_signature(ui, result.signed, result.signer, bool(signers))
+    ui.status(f"Erfolgreich entpackt: {result.entries} Einträge nach {Path(args.output)}")
     return EXIT_OK
 
 
@@ -1308,6 +1310,45 @@ def _positive_int(text: str) -> int:
     return value
 
 
+class _Formatter(argparse.HelpFormatter):
+    def add_usage(self, usage, actions, groups, prefix=None):  # "Aufruf:" statt "usage:"
+        super().add_usage(usage, actions, groups, "Aufruf: " if prefix is None else prefix)
+
+
+# argparse meldet englisch (Wortlaut je nach Python-Version leicht anders) – die häufigsten Fälle
+# auf Deutsch, alles andere bleibt, wie es ist
+_ARGPARSE_DE = [
+    (r"the following arguments are required: (.+)", r"Es fehlt: \1"),
+    (r"unrecognized arguments: (.+)", r"Unbekannte Angabe: \1"),
+    (r"argument (.+?): invalid choice: (.+?) \(choose from (.+)\)", r"\1: ungültig: \2 (möglich: \3)"),
+    (r"argument (.+?): expected one argument", r"\1 braucht einen Wert"),
+    (r"argument (.+?): invalid \w+ value: (.+)", r"\1: ungültiger Wert: \2"),
+]
+
+
+class _Parser(argparse.ArgumentParser):
+    """argparse auf Deutsch: Überschriften, -h und die häufigsten Fehlermeldungen – die Hilfe war halb
+    englisch ("usage:", "show this help message and exit"). Bedienfehler enden mit Exit 1: argparse
+    nimmt 2, und das heißt bei tres0r „falsches Passwort“."""
+
+    def __init__(self, *args, **kwargs) -> None:
+        kwargs.setdefault("formatter_class", _Formatter)
+        super().__init__(*args, **kwargs)
+        self._positionals.title = "Argumente"
+        self._optionals.title = "Optionen"
+        for action in self._actions:
+            if action.dest == "help":
+                action.help = "diese Hilfe anzeigen"
+
+    def error(self, message: str):
+        for pattern, german in _ARGPARSE_DE:
+            if re.fullmatch(pattern, message):
+                message = re.sub(pattern, german, message)
+                break
+        self.print_usage(sys.stderr)
+        self.exit(EXIT_ERROR, f"{self.prog}: Fehler: {message}\nHilfe: {self.prog} -h\n")
+
+
 def _common_options() -> argparse.ArgumentParser:
     parent = argparse.ArgumentParser(add_help=False)
     parent.add_argument("--json", action="store_true", help="Ergebnis als JSON auf stdout")
@@ -1398,15 +1439,24 @@ def _threads_option(p: argparse.ArgumentParser) -> None:
                    help="Threads für Hashen und zstd (Standard: Anzahl Kerne, höchstens 8; 1 = aus)")
 
 
+def cmd_help(args: argparse.Namespace, ui: Ui) -> int:
+    """``tres0r help [BEFEHL]`` – wie ``tres0r -h`` bzw. ``tres0r BEFEHL -h`` (endet dort mit Exit 0)."""
+    build_parser().parse_args([args.topic, "-h"] if args.topic else ["-h"])
+    return EXIT_OK
+
+
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(
+    parser = _Parser(
         prog="tres0r",
-        description="Dateien und Datenströme verschlüsseln (Argon2id, X25519, ChaCha20-Poly1305).",
-        epilog="Exit-Codes: 0 OK, 1 Fehler/Abbruch, 2 falsches Passwort/kein passender Schlüssel, "
+        description="Dateien und Datenströme verschlüsseln (Argon2id, X25519, ChaCha20-Poly1305). "
+                    "Hilfe zu einem Befehl: tres0r BEFEHL -h (oder tres0r help BEFEHL).",
+        epilog="Exit-Codes: 0 OK, 1 Fehler/Abbruch/Bedienfehler, 2 falsches Passwort/kein passender Schlüssel, "
                "3 Container beschädigt/manipuliert/unsicher, 4 Unterschiede (diff), 130 Strg+C.",
     )
-    parser.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
-    sub = parser.add_subparsers(dest="command", required=True, metavar="BEFEHL")
+    parser.add_argument("--version", action="version", version=f"%(prog)s {__version__}",
+                        help="Version anzeigen")
+    # nicht "required": ohne Befehl zeigt main() die Übersicht statt einer Fehlermeldung
+    sub = parser.add_subparsers(dest="command", metavar="BEFEHL")
     common, unlock, gen, keyopts = _common_options(), _unlock_options(), _generator_options(), _key_options()
     signer = _signer_options()
     newpass = _new_password_options("--passphrase-file")
@@ -1427,7 +1477,7 @@ def build_parser() -> argparse.ArgumentParser:
     sel.add_argument("--no-ignore-file", action="store_true", help=".tres0rignore in Quellordnern nicht beachten")
     sel.add_argument("--strict-names", action="store_true",
                      help="abbrechen, wenn Namen nicht auf allen Systemen gültig sind")
-    opt = p.add_argument_group("Optionen")
+    opt = p.add_argument_group("Weitere Optionen")
     opt.add_argument("-z", "--compress", action="store_true", help="mit zstd komprimieren")
     opt.add_argument("--no-pad", action="store_true", help="kein Größen-Padding (verrät die exakte Datenmenge)")
     opt.add_argument("--verify", action="store_true", help="fertigen Container danach komplett prüfen")
@@ -1665,13 +1715,21 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--dir", metavar="ORDNER", help="Ordner für die Testdaten (Standard: temporär)")
     p.add_argument("--size", type=int, default=256, metavar="MiB", help="Größe der Testdaten (Standard %(default)s)")
     p.set_defaults(func=cmd_bench)
+
+    p = sub.add_parser("help", help="Hilfe anzeigen – zu allem oder zu einem Befehl (wie -h)")
+    p.add_argument("topic", nargs="?", choices=sorted(sub.choices), metavar="BEFEHL")
+    p.set_defaults(func=cmd_help, json=False)
     return parser
 
 
 def main(argv: list[str] | None = None) -> int:
     pwgen.setup_stdio()  # UTF-8 auch in der alten Windows-Konsole und bei Umleitung
     _Terminal.stdin_is_data = False
-    args = build_parser().parse_args(argv)
+    parser = build_parser()
+    args = parser.parse_args(argv)
+    if args.command is None:  # nur "tres0r": die Übersicht statt einer Fehlermeldung
+        parser.print_help()
+        return EXIT_ERROR
     try:
         return _run(args)
     except BrokenPipeError:  # z. B. "tres0r list … | head": Leser hat genug, still beenden

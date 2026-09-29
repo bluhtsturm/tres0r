@@ -117,3 +117,42 @@ def test_not_a_container(tmp_path, capsys):
     junk.write_bytes(b"irgendwas")
     assert main(["info", str(junk)]) == 3
     assert "Keine tres0r-Datei" in capsys.readouterr().err
+
+
+# --- Hilfe und Erfolgsmeldungen (Wünsche nach dem Test unter macOS: „für doofe“, eindeutiger Erfolg) --
+def test_help_for_beginners(capsys):
+    """Nur "tres0r" endete mit "error: the following arguments are required: BEFEHL" (englisch, Exit 2
+    – der heißt bei tres0r „falsches Passwort“); "tres0r help" gab es nicht; die Hilfe war halb
+    englisch ("usage:", "show this help message and exit")."""
+    assert main([]) == 1
+    out = capsys.readouterr().out
+    assert out.startswith("Aufruf: tres0r") and "pack" in out and "tres0r help BEFEHL" in out
+    for argv, expected in ((["help"], "Aufruf: tres0r [-h]"), (["help", "pack"], "Aufruf: tres0r pack"),
+                           (["pack", "-h"], "Aufruf: tres0r pack")):
+        with pytest.raises(SystemExit) as stop:
+            main(argv)
+        out = capsys.readouterr().out
+        assert stop.value.code == 0 and out.startswith(expected), argv
+        assert not re.search(r"usage:|positional arguments|show this help|^options:", out, re.M), argv
+    with pytest.raises(SystemExit) as stop:
+        main(["pack"])
+    err = capsys.readouterr().err
+    assert stop.value.code == 1 and "Fehler: Es fehlt: PFAD" in err and "Hilfe: tres0r pack -h" in err
+    with pytest.raises(SystemExit) as stop:
+        main(["help", "gibtsnicht"])
+    assert stop.value.code == 1 and "Fehler:" in capsys.readouterr().err
+
+
+def test_pack_and_unpack_say_they_succeeded(tmp_path, sample_tree, pwfile, capsys):
+    """Erfolg eindeutig wie in TUI und GUI – ohne ✓: Windows-Konsolen schreiben umgeleitet cp1252."""
+    out = tmp_path / "c.tres0r"
+    assert main(["pack", *map(str, sample_tree), "-o", str(out), "-l", "schnell", "--password-file", pwfile,
+                 "--offline"]) == 0
+    printed = capsys.readouterr()
+    assert printed.out.startswith(f"Erfolgreich gepackt: {out}  (") and "✓" not in printed.out + printed.err
+    dest = tmp_path / "ziel"
+    assert main(["unpack", str(out), "-o", str(dest), "--password-file", pwfile]) == 0
+    printed = capsys.readouterr()
+    assert "Erfolgreich entpackt: " in printed.err and f"nach {dest}" in printed.err
+    assert "Erfolgreich" not in printed.out  # stdout bleibt die Liste der Namen
+

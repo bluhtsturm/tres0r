@@ -63,7 +63,7 @@ class Driver:
 
     def __init__(self, app, window):
         self.app, self.window = app, window
-        self.errors, self.infos, self.handlers = [], [], {}
+        self.errors, self.infos, self.handlers, self.progress = [], [], {}, []
         self.cancel_next = False
         window.run_dialog = self.run_dialog
         window.show_error = self.errors.append
@@ -78,6 +78,7 @@ class Driver:
 
     def run_dialog(self, dialog):
         if isinstance(dialog, gui.ProgressDialog):
+            self.progress.append(dialog)
             dialog.show()
             deadline = time.monotonic() + 60
             cancelled = False
@@ -131,7 +132,7 @@ def test_pack_and_mismatch(app, tmp_path, project):
     window.select(project)
     window.pack()
     out = tmp_path / "Projekt.tres0r"
-    assert not driver.errors and any("Gepackt" in i for i in driver.infos)
+    assert not driver.errors and any(i.startswith("✓ Erfolgreich gepackt: ") for i in driver.infos)
     assert container.verify(out, PASSWORD).files == 2
     assert window.info is not None and "tres0r-Container" in window.details.text()
 
@@ -719,3 +720,90 @@ def test_cli_without_pyside(monkeypatch, capsys):
 
     assert main(["gui"]) == 1
     assert "tres0r-crypt[gui]" in capsys.readouterr().err
+
+
+# --- Erfolg, Hilfe und Beenden, Schrift (Wünsche und Befunde aus dem Test unter macOS) --------------
+def test_fixed_font_is_the_platform_font(app, monkeypatch):
+    """macOS meldete „Populating font family aliases took 133 ms. Replace uses of missing font family
+    "Monospace" …“ – die Schrift hieß fest "monospace", die gibt es dort nicht. Jetzt die
+    Festbreitenschrift der Plattform (Menlo, Consolas, DejaVu Sans Mono …). Unter Linux heißt auch
+    die "monospace" (fontconfig) – deshalb prüft der Test die Herkunft, nicht nur den Namen."""
+    from PySide6.QtGui import QFont, QFontDatabase, QFontInfo
+
+    fixed = gui._fixed_font()
+    assert fixed == QFontDatabase.systemFont(QFontDatabase.FixedFont) and QFontInfo(fixed).fixedPitch()
+    monkeypatch.setattr(gui, "_fixed_font", lambda: QFont("Plattform-Festbreite"))
+    view = gui.SecretView()
+    dialog = gui.SecretsDialog(None, "Phrase", [("Phrase", "a-b-c")])
+    assert view.font().family() == dialog.text.font().family() == "Plattform-Festbreite"
+    dialog.close()
+
+
+def test_success_stays_visible_until_closed(app):
+    """Der Erfolg stand nur zehn Sekunden in der Statuszeile. Jetzt bleibt der Fortschrittsdialog
+    offen: grüne Kopfzeile mit ✓, Zusammenfassung, „Schließen“ (auch Esc) – ohne ``success`` schließt
+    er sich wie bisher selbst (Öffnen, Entsperren, HIBP-Prüfung)."""
+    def finish(dialog):
+        dialog.show()
+        deadline = time.monotonic() + 30
+        while dialog.running:
+            app.processEvents()
+            assert time.monotonic() < deadline
+            time.sleep(0.005)
+        app.processEvents()
+
+    long_path = "/sehr/langer/pfad/" + "unterordner/" * 12 + "archiv.tres0r"
+    dialog = gui.ProgressDialog(None, "Packen", lambda m: 42, "Erfolgreich gepackt",
+                                lambda r: f"{long_path} – {r} Einträge")
+    finish(dialog)
+    assert dialog.isVisible() and dialog.headline.text() == "✓ Erfolgreich gepackt"
+    assert dialog.outcome.text().endswith("42 Einträge") and dialog.cancel_button.text() == "Schließen"
+    assert dialog.phase.isHidden() and dialog.item.isHidden() and dialog.bar.value() == dialog.bar.maximum()
+    # alles sichtbar, nichts überdeckt: die umbrochene Zusammenfassung über dem Knopf, im Dialog
+    outcome, button = dialog.outcome.geometry(), dialog.cancel_button.geometry()
+    assert outcome.height() >= dialog.outcome.heightForWidth(outcome.width()) and outcome.bottom() < button.top()
+    assert button.bottom() <= dialog.height()
+    dialog.reject()  # Esc: schließt jetzt, statt abzubrechen
+    assert not dialog.isVisible() and dialog.result() == QDialog.Accepted and dialog.result_value == 42
+
+    quiet = gui.ProgressDialog(None, "Öffnen", lambda m: 7)
+    finish(quiet)
+    assert not quiet.isVisible() and quiet.result_value == 7
+
+
+def test_pack_reports_success_in_the_dialog(app, tmp_path, project):
+    window, driver = make(app, tmp_path)
+    driver.handlers["PackDialog"] = lambda dialog: (dialog.passwords.password.setText(PASSWORD),
+                                                    dialog.passwords.confirm.setText(PASSWORD),
+                                                    dialog._accept(), dialog.result() == QDialog.Accepted)[-1]
+    window.select(project)
+    window.pack()
+    dialog = driver.progress[-1]
+    assert dialog.headline.text() == "✓ Erfolgreich gepackt" and "Projekt.tres0r" in dialog.outcome.text()
+    assert any(i.startswith("✓ Erfolgreich gepackt: ") for i in driver.infos)
+
+
+def test_help_about_and_quit_in_the_menu(app, tmp_path, project):
+    """Wunsch „Hilfe und Beenden für doofe“ – auch in der GUI, mit den Kürzeln der Plattform."""
+    from PySide6.QtGui import QAction, QKeySequence
+
+    window, driver = make(app, tmp_path)
+    window.show()
+    menus = [action.text() for action in window.menuBar().actions()]
+    assert menus == ["&Datei", "&Hilfe"]
+    quit_action, guide, about = (window.menu_actions[name] for name in ("quit", "help", "about"))
+    assert quit_action.menuRole() == QAction.QuitRole and about.menuRole() == QAction.AboutRole
+    assert quit_action.shortcuts() and guide.shortcuts()  # Windows kennt kein Standardkürzel fürs Beenden
+    shown = {}
+    driver.handlers["HelpDialog"] = lambda dialog: shown.update(dialog.rows) or True
+    driver.handlers["QMessageBox"] = lambda box: shown.update(about=box.text()) or True
+    guide.trigger()
+    assert shown["Packen"] == QKeySequence("Ctrl+P").toString(QKeySequence.NativeText)
+    assert shown["Beenden"] and shown["Kurzanleitung"]
+    about.trigger()
+    assert shown["about"].startswith("tres0r ")
+    window.select(project)  # der Hinweis nennt die Kürzel der Plattform (unter macOS ⌘P, nicht „Strg+P“)
+    assert f"Packen mit {QKeySequence('Ctrl+P').toString(QKeySequence.NativeText)}" in window.details.text()
+    quit_action.trigger()
+    assert not window.isVisible()
+

@@ -23,7 +23,8 @@ Container und eingebautem Passphrasen-Generator (pwgen) samt Have-I-Been-Pwned-P
 > **Status: 1.2.0.** Getestet unter Linux mit Python 3.10–3.14 (automatische Tests,
 > Fuzzing, Property-Tests). Unter Windows und macOS laufen die automatischen Tests
 > (ohne GUI und FUSE) in der CI ebenfalls durch. Die GUI von Version 1.0 lief im
-> Handtest unter Debian 13 und unter Windows Server 2025 (von PyPI installiert); die
+> Handtest unter Debian 13 und unter Windows Server 2025 (von PyPI installiert), GUI
+> und TUI von 1.2.0 unter macOS Tahoe 26.7; die
 > Neuerungen aus 1.1.0 (Datenleck-Warnung, Passwort-Vorschlag, Abbruch) und 1.2.0
 > (Längenwahl der Vorschläge) sind von Hand bestätigt. FIDO2
 > ist nur gegen einen Software-Token getestet, noch nicht mit echter Hardware. Eine
@@ -91,13 +92,19 @@ Format, Größe, Schlüssel-Slots, Signatur und Segmente.
 | `n` `w` `s` | | | +Passwort (optional Keyfile/FIDO2), +Phrase, +Anteile K/N |
 | `c` `x` | | | Passwort ändern, Slot entfernen (mit Rückfrage) |
 
+Überall: `?`, `h` oder `F1` zeigen die Hilfe zur Ansicht – Erklärung und alle Tasten
+(in Eingabefeldern tippen `?` und `h` Zeichen, dort hilft `F1`, am Mac oft mit `fn`);
+`q` beendet (in Eingabefeldern und Fenstern `Strg+Q`), `Esc` führt zurück bzw. bricht
+ab. Hilfe und Beenden stehen in der Fußzeile immer vorn.
+
 Entsperren mit Passwort, Keyfile oder FIDO2-Token; verlangt der Token seine PIN,
 fragt ein eigenes Fenster danach. Neue Geheimnisse (Phrase, Anteile) erscheinen
 nur einmal – vollständig und umbrechend, Anteile in Vierergruppen (so abgetippt
 passen sie) – und lassen sich als Dateien (0600) speichern. Lange Vorgänge zeigen
-Balken, Datei, Durchsatz und Restzeit und lassen sich abbrechen; wie in der CLI
-bleibt dabei nichts Halbes zurück. Passt in ein 80×24-Terminal. Die TUI ist nicht
-Teil der stabilen API.
+Balken, Datei, Durchsatz und Restzeit und lassen sich abbrechen (Knopf oder `Esc`);
+wie in der CLI bleibt dabei nichts Halbes zurück. Danach steht das Ergebnis eindeutig
+da: grün mit ✓ („Erfolgreich gepackt“ und Zusammenfassung), Fehler rot mit ✗, ein
+Abbruch gelb. Passt in ein 80×24-Terminal. Die TUI ist nicht Teil der stabilen API.
 
 ## Grafische Oberfläche
 
@@ -108,7 +115,11 @@ tres0r gui ~/Backups          # Startordner optional
 Dateibaum mit Details (bei Containern schon vor dem Entsperren), Werkzeugleiste mit
 Packen (Strg+P), Öffnen (Strg+O, auch Doppelklick), Prüfen (Strg+T), Anhängen
 (Strg+A, ein Ordner oder einzelne Dateien), Vergleichen (Strg+D, vorgeschlagen wird
-der gleichnamige Ordner) und Schlüssel (Strg+K). Ordner ins Fenster ziehen
+der gleichnamige Ordner) und Schlüssel (Strg+K); unter macOS ⌘ statt Strg. Das Menü
+„Hilfe“ hat eine Kurzanleitung mit allen Tastenkürzeln (F1, unter macOS ⌘?), „Datei“
+das Beenden (Strg+Q bzw. ⌘Q). Nach Packen, Entpacken, Prüfen, Anhängen und
+Schlüsseländerungen bleibt der Fortschrittsdialog mit „✓ Erfolgreich …“ und
+Zusammenfassung offen, bis man ihn schließt. Ordner ins Fenster ziehen
 öffnet den Packdialog, ein gezogener Container wird geöffnet. Rohdaten-Container
 (`tres0r encrypt`) enthalten keine Dateien – für sie gibt es Prüfen und Schlüssel.
 Der Inhalt eines Containers erscheint in einem eigenen Fenster mit Größe, Datum und
@@ -142,6 +153,9 @@ Systemsprache. Nicht Teil der stabilen API.
   für Menschen, nicht zum Auswerten.
 
 ## Nutzung
+
+`tres0r help` (oder nur `tres0r`) zeigt alle Befehle, `tres0r help pack` bzw.
+`tres0r pack -h` die Optionen eines Befehls.
 
 ```bash
 # Verschlüsseln – Passwort wird abgefragt und geprüft
@@ -410,7 +424,7 @@ im JSON – diese Ausgabe also nicht loggen.
 | Exit-Code | Bedeutung |
 |-----------|-----------|
 | 0 | OK |
-| 1 | Fehler oder Abbruch (auch: `checkpass` hat Probleme gefunden) |
+| 1 | Fehler oder Abbruch, auch Bedienfehler wie eine unbekannte Option (und: `checkpass` hat Probleme gefunden) |
 | 2 | falsches Passwort bzw. kein passender Schlüssel |
 | 3 | Container beschädigt, manipuliert oder mit unsicherem Inhalt; Signatur fehlt/falsch |
 | 4 | `diff`: Unterschiede gefunden |
