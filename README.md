@@ -363,7 +363,16 @@ Abbruch oder Fehler wird sofort zurückgekürzt, nach einem Stromausfall stellt
 `repair` einen gültigen Stand her (fertig geschriebenes Anhängen abschließen, sonst
 zurücksetzen). Nach jedem Anhängen wird die vorherige Segmenttabelle entwertet – wer
 die Datei auf einen früheren Stand abschneidet, erhält keinen gültigen Container.
+Hat ein Absturz genau zwischen neuer Tabelle und diesem Schritt eine ältere gültig
+gelassen, entwerten `repair` bzw. das nächste Anhängen sie nachträglich.
 Eine vollständige ältere Kopie lässt sich naturgemäß nicht als „veraltet“ erkennen.
+
+Was Signaturen bei Segmenten **nicht** leisten: Signiert ist jedes Segment für sich.
+Wer den Datenschlüssel kennt – jeder, der den Container öffnen kann –, kann die
+Segmenttabelle neu schreiben und so Segmente weglassen oder umsortieren (und damit
+bestimmen, welche Fassung gleichnamiger Dateien gilt), ohne dass eine Signatur
+bricht. Muss belegt sein, dass *alles* vom Unterzeichner stammt und nichts fehlt,
+einen neuen signierten Container packen statt anzuhängen.
 
 Grenzen: nicht für aufgeteilte (`--split`) und Rohdaten-Container, nicht aus einer
 Pipe entpackbar (die Segmenttabelle steht am Ende); ältere tres0r-Versionen lehnen
@@ -647,6 +656,8 @@ Details: Docstrings in `tres0r/header2.py`, `tres0r/payload.py` und `tres0r/stre
   Padding mildert das, beseitigt es aber nicht.
 * Kein Post-Quanten-Schutz für X25519-Empfänger (Passwörter und Phrasen sind davon
   nicht betroffen).
+* Angehängte Segmente: Signaturen belegen jedes Segment einzeln, nicht Vollständigkeit
+  und Reihenfolge der Segmentliste – siehe „Anhängen: append“.
 
 * Python kann Schlüssel nicht zuverlässig aus dem RAM löschen.
 * Originale werden nicht „sicher gelöscht“ – auf SSDs ist das nicht verlässlich machbar.

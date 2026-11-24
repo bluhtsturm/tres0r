@@ -2,7 +2,9 @@
 
 ## Unveröffentlicht
 
-Format und Python-API sind unverändert.
+Format und Python-API sind unverändert. FORMAT.md ergänzt (ohne Formatänderung): Grenze
+für die Länge der Segmenttabelle, Entwerten liegengebliebener Tabellen, was Signaturen
+bei Segmenten nicht belegen.
 
 ### Behoben
 
@@ -33,7 +35,25 @@ Format und Python-API sind unverändert.
   (Exit 3); ein Hardlink auf einen Ordner wird abgelehnt statt als leerer Ordner angelegt.
 * **Angehängte Segmente mit sehr tiefen Ordnerbäumen:** Kam ein Baum mit ~1000 Ebenen in
   zwei Segmenten vor, endete das Entpacken in einem `RecursionError` – das Zusammenführen
-  der Segmente arbeitet jetzt iterativ (wie schon das Durchsuchen beim Packen).
+  der Segmente arbeitet jetzt iterativ (wie schon das Durchsuchen beim Packen). Bis
+  Python 3.12 ist auch `shutil.rmtree` rekursiv und scheitert dort an solchen Bäumen,
+  sogar mit `ignore_errors` (gemessen unter 3.11 und 3.12); das Aufräumen der
+  Staging-Ordner nutzt vor 3.13 deshalb einen eigenen, iterativen Ersatz.
+* **`repair` nach einem Absturz im letzten Schritt des Anhängens:** Lag der Absturz
+  zwischen neuer Segmenttabelle und dem Entwerten der alten, meldete `repair` „Container
+  ist in Ordnung“ – die alte Tabelle blieb gültig, ein Abschneiden auf den älteren Stand
+  fiel also wieder nicht auf. `repair` und jedes weitere Anhängen entwerten solche
+  liegengebliebenen Tabellen jetzt.
+* **Segmenttabelle:** Die Länge am Dateiende ist nicht authentifiziert; ein präparierter
+  Container konnte tres0r bis zu 4 GiB in den Speicher lesen lassen, bevor die Prüfung
+  scheiterte. Jetzt wird sie vorher gegen die größte gültige Tabelle (139 285 Byte)
+  geprüft.
+
+### Dokumentation
+
+* README und FORMAT.md sagen deutlich, was Signaturen bei angehängten Segmenten nicht
+  leisten: Wer den Datenschlüssel kennt, kann Segmente weglassen oder umsortieren, ohne
+  dass eine Signatur bricht (FORMAT.md nannte bisher nur die Vollständigkeit).
 
 ## 1.3.0 – Erfolg eindeutig, Hilfe und Beenden in allen Oberflächen
 

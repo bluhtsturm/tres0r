@@ -30,6 +30,7 @@ import json
 import os
 import shutil
 import stat
+import sys
 import tarfile
 import tempfile
 import time
@@ -1174,6 +1175,63 @@ def extract(
                                  only=only, signers=signers, xattrs=xattrs, acls=acls)
 
 
+def _rmtree(path: str | os.PathLike[str], *, ignore_errors: bool = False) -> None:
+    """Ordnerbaum löschen, auch einen sehr tiefen.
+
+    shutil.rmtree arbeitet bis Python 3.12 rekursiv und scheitert an ~1000 Ebenen mit
+    RecursionError – sogar mit ignore_errors=True (gemessen unter 3.11 und 3.12). Ab
+    3.13 ist es iterativ und wird direkt genutzt.
+    """
+    if sys.version_info >= (3, 13):
+        shutil.rmtree(path, ignore_errors=ignore_errors)
+    else:
+        _rmtree_iterative(os.fspath(path), ignore_errors)
+
+
+def _rmtree_iterative(root: str, ignore_errors: bool) -> None:
+    """Ohne Rekursion: Symlinks werden entfernt, nie verfolgt; Ordner nach ihrem Inhalt."""
+    def attempt(action, target: str) -> None:
+        try:
+            action(target)
+        except OSError:
+            if os.name == "nt" and action is os.unlink:  # Windows: Ordner-Symlink/Junction
+                try:
+                    os.rmdir(target)
+                    return
+                except OSError:
+                    pass
+            if not ignore_errors:
+                raise
+
+    if os.path.islink(root):  # wie shutil.rmtree: nie dem Ziel eines Symlinks folgen
+        if ignore_errors:
+            return
+        raise OSError(errno.ENOTDIR, "Symlink statt Ordner – wird nicht gelöscht", root)
+    stack = [(root, False)]
+    while stack:
+        path, emptied = stack.pop()
+        if emptied:
+            attempt(os.rmdir, path)
+            continue
+        try:
+            with os.scandir(path) as it:
+                entries = list(it)
+        except OSError:
+            if not ignore_errors:
+                raise
+            continue
+        stack.append((path, True))
+        for entry in entries:
+            try:
+                is_dir = entry.is_dir(follow_symlinks=False)
+            except OSError:
+                is_dir = False
+            if is_dir:
+                stack.append((entry.path, False))
+            else:
+                attempt(os.unlink, entry.path)
+
+
 def _merge_tree(src: Path, dst: Path) -> None:
     """src in dst einsortieren; bei gleichem Namen gewinnt src (das neuere Segment).
 
@@ -1191,7 +1249,7 @@ def _merge_tree(src: Path, dst: Path) -> None:
                 continue
             if os.path.lexists(target):
                 if target.is_dir() and not target.is_symlink():
-                    shutil.rmtree(target)
+                    _rmtree(target)
                 else:
                     target.unlink()
             os.replace(item.path, target)
@@ -1213,7 +1271,7 @@ def _extract_segments(ops: list[_Opened], dest: Path, *, progress: Progress, ren
                                       signers=signers, xattrs=xattrs, acls=acls, require_match=False)
                 _merge_tree(part, merged)
             finally:
-                shutil.rmtree(part, ignore_errors=True)
+                _rmtree(part, ignore_errors=True)
             result.entries += one.entries
             result.renamed += one.renamed
             result.warnings += one.warnings
@@ -1229,7 +1287,7 @@ def _extract_segments(ops: list[_Opened], dest: Path, *, progress: Progress, ren
         for name in names:
             os.replace(merged / name, dest / name)
     finally:
-        shutil.rmtree(merged, ignore_errors=True)
+        _rmtree(merged, ignore_errors=True)
     result.names = names
     result.signer = ", ".join(sorted(seen)) or None
     return result
@@ -1339,7 +1397,7 @@ def _extract_opened(op: _Opened, dest: Path, *, progress: Progress, rename: bool
         for name in names:
             os.replace(staging / name, dest / name)
     finally:
-        shutil.rmtree(staging, ignore_errors=True)
+        _rmtree(staging, ignore_errors=True)
     return ExtractResult(names=names, entries=guard.count, renamed=guard.renamed, signed=op.signed, signer=signer,
                          warnings=warnings)
 
@@ -2083,7 +2141,7 @@ def salvage(
                     _salvage_op(op, part, rename, result, progress)
                     _merge_tree(part, staging)  # neuere Segmente gewinnen
                 finally:
-                    shutil.rmtree(part, ignore_errors=True)
+                    _rmtree(part, ignore_errors=True)
             names = sorted(os.listdir(staging))
             conflicts = [n for n in names if os.path.lexists(dest / n)]
             if conflicts:
@@ -2092,7 +2150,7 @@ def salvage(
                 os.replace(staging / name, dest / name)
             result.names = names
         finally:
-            shutil.rmtree(staging, ignore_errors=True)
+            _rmtree(staging, ignore_errors=True)
     return result
 
 
@@ -2394,11 +2452,10 @@ def append(
             os.fsync(f.fileno())
             journal.unlink(missing_ok=True)
             raise
-        # Abschluss: alte Tabelle entwerten (gegen Abschneiden) bzw. Header umstellen
-        if header.segmented:
-            f.seek(size_before - len(segments.MAGIC))
-            f.write(bytes(len(segments.MAGIC)))
-        else:
+        # Abschluss: alte Tabelle(n) entwerten (gegen Abschneiden) bzw. Header umstellen –
+        # auch ältere, die ein früherer Absturz an dieser Stelle gültig gelassen hat
+        segments.invalidate_old_tables(f, header.header_len, table)
+        if not header.segmented:
             flagged = header.with_flags(dek, header.flags | v2.FLAG_SEGMENTS).to_bytes()
             if len(flagged) != header.header_len:
                 raise Tres0rError("Interner Fehler: Header-Länge würde sich ändern.")
@@ -2438,12 +2495,14 @@ def repair(container: str | os.PathLike[str], credentials: Unlock) -> RepairResu
         total = f.seek(0, io.SEEK_END)
         dek, _ = _unlock(header, credentials)
         try:
-            segments.read_table(f, total, header.header_len, dek, header.stream_nonce)
-            complete = True
+            table, _ = segments.read_table(f, total, header.header_len, dek, header.stream_nonce)
         except (FormatError, IntegrityError):
-            complete = False
+            table = None
+        complete = table is not None
         if complete and header.segmented:
-            action = "Container ist in Ordnung."
+            stale = segments.invalidate_old_tables(f, header.header_len, table)
+            action = (f"Unterbrochenes Anhängen abgeschlossen ({stale} ältere Segmenttabelle(n) entwertet)."
+                      if stale else "Container ist in Ordnung.")
         elif complete:
             f.seek(0)
             f.write(header.with_flags(dek, header.flags | v2.FLAG_SEGMENTS).to_bytes())
@@ -2462,6 +2521,7 @@ def repair(container: str | os.PathLike[str], credentials: Unlock) -> RepairResu
             if found is None:
                 raise IntegrityError("Keine gültige Segmenttabelle gefunden – 'tres0r salvage' rettet, was lesbar ist.")
             f.truncate(found[1])
+            segments.invalidate_old_tables(f, header.header_len, found[0])
             action = "Auf den letzten gültigen Stand gekürzt."
         else:
             raise Tres0rError("Nichts Sicheres zu reparieren – 'verify' bzw. 'salvage' verwenden.")

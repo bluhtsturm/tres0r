@@ -96,3 +96,30 @@ def test_window_seek_modes(tmp_path):
     assert window.seek(0, io.SEEK_END) == 7 and window.read() == b""
     window.seek(-3, io.SEEK_CUR)
     assert window.tell() == 4 and window.read(10) == b"456" and window.peek() == b""
+
+
+def test_oversized_table_length_is_refused_before_reading(appended):
+    """Die Länge im Tabellenende ist nicht authentifiziert: Ohne Obergrenze las tres0r den
+    angeblichen Tabelleninhalt (bis zu 4 GiB) in den Speicher, bevor die Prüfung scheiterte."""
+    import io
+    import os
+
+    out, header, dek, *_ = appended
+    bogus = 2 << 20
+    with open(out, "ab") as f:
+        f.write(os.urandom(bogus) + struct.pack(">I", bogus) + segments.MAGIC)
+    reads = []
+
+    class Recording(io.FileIO):
+        def read(self, size=-1):
+            reads.append(size)
+            return super().read(size)
+
+    with Recording(out, "rb") as f:
+        total = f.seek(0, 2)
+        with pytest.raises(FormatError, match="ungültige Länge"):
+            segments.read_table(f, total, header.header_len, dek, header.stream_nonce)
+    assert max(reads) < segments.MAX_TABLE_CT
+    biggest = [segments.SegmentEntry(i, 16, bytes(16), 0, 0) for i in range(segments.MAX_SEGMENTS)]
+    blob = segments.encode_table(dek, header.stream_nonce, biggest)
+    assert len(blob) - 16 - 12 == segments.MAX_TABLE_CT  # die größte gültige Tabelle passt genau

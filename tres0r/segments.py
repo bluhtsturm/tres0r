@@ -41,6 +41,9 @@ _INFO_TABLE = b"tres0r v2 segment table"
 _ENTRY = struct.Struct(">QQ16sBB")
 _TAIL = struct.Struct(">I8s")
 SEGMENT_FLAGS = v2.FLAG_INDEX | v2.FLAG_SIGNED
+# Größte gültige Tabelle (Chiffretext samt Tag): 139 285 Byte. Die Länge im Tabellenende ist
+# unauthentifiziert – ohne Grenze läse ein präparierter Container bis zu 4 GiB in den Speicher.
+MAX_TABLE_CT = 1 + 4 + MAX_SEGMENTS * _ENTRY.size + 16
 
 
 @dataclass(frozen=True)
@@ -99,10 +102,33 @@ def read_table(f, total: int, payload_start: int, dek: bytes, stream_nonce: byte
     start = total - _TAIL.size - length - 16
     if magic != MAGIC or length < 16 or start < payload_start:
         raise FormatError("Segmenttabelle fehlt – Anhängen unterbrochen? 'tres0r repair' hilft.")
+    if length > MAX_TABLE_CT:  # vor dem Lesen
+        raise FormatError("Segmenttabelle hat eine ungültige Länge.")
     f.seek(start)
     entries = _decode(dek, stream_nonce, f.read(16 + length))
     _validate(entries, start - payload_start)
     return entries, start
+
+
+def invalidate_old_tables(f, payload_start: int, entries: list[SegmentEntry]) -> int:
+    """Kennungen älterer Tabellen überschreiben, die noch vor einem Segment stehen.
+
+    Normalerweise entwertet das Anhängen nur die direkt vorherige Tabelle. Stürzt der
+    Rechner zwischen neuer Tabelle und diesem Schritt ab, bliebe die alte gültig –
+    Abschneiden auf den älteren Stand fiele dann nicht auf. Prüft die Lücke vor jedem
+    Segment (dort lag die jeweils vorherige Tabelle). Gibt die Anzahl entwerteter zurück.
+    """
+    count, end = 0, 0
+    for entry in entries:
+        if entry.offset - end >= len(MAGIC):
+            at = payload_start + entry.offset - len(MAGIC)
+            f.seek(at)
+            if f.read(len(MAGIC)) == MAGIC:
+                f.seek(at)
+                f.write(bytes(len(MAGIC)))
+                count += 1
+        end = entry.offset + entry.length
+    return count
 
 
 def find_last_table(f, total: int, payload_start: int, dek: bytes, stream_nonce: bytes

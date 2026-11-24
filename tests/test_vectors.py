@@ -15,7 +15,7 @@ from pathlib import Path
 
 import pytest
 
-from tres0r import container, keys, payload, sign
+from tres0r import container, keys, payload, segments, sign
 from tres0r import header as v1
 from tres0r import header2 as h2
 from tres0r import stream as stream_mod
@@ -193,6 +193,7 @@ def test_format_md_mentions_all_constants():
         "Block (lesen)": f"{payload.MAX_READ_BLOCK >> 20} MiB",
         "Chunks zu": f"{stream_mod.CHUNK_SIZE}",
         "S / ": f"{stream_mod.ENC_CHUNK_SIZE}",
+        "Segmenttabelle `ct`": f"| {segments.MAX_TABLE_CT} Byte (5 + {segments.MAX_SEGMENTS} · 34 + 16",
     }
     for context, number in numbers.items():
         assert number in spec, (context, number)
