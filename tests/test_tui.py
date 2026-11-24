@@ -260,6 +260,38 @@ def test_open_browse_and_extract(project, tmp_path):
     assert (dest / "Projekt" / "notiz.txt").read_text() == "Hallo"
 
 
+def test_extract_shows_hints(tmp_path, monkeypatch):
+    """Hinweise des Entpackens (z. B. Hardlink als Kopie auf FAT/exFAT) zeigte nur die CLI."""
+    import tarfile
+
+    from conftest import make_tar, write_raw_container_v2
+
+    target, link = tarfile.TarInfo("P/a"), tarfile.TarInfo("P/[h]")  # Markup-artiger Name: escape
+    target.size, link.type, link.linkname = 6, tarfile.LNKTYPE, "P/a"
+    out = tmp_path / "l.tres0r"
+    write_raw_container_v2(out, make_tar([(target, b"inhalt"), (link, None)]))
+    dest = tmp_path / "ziel"
+
+    def refuse(*args, **kwargs):
+        raise OSError(1, "keine Hardlinks (simuliert)")
+
+    async def scenario(app, pilot):
+        app.select(out)
+        await pilot.press("o")
+        await unlock(app, pilot)
+        await finish_progress(app, pilot)
+        await showing(app, pilot, tui.BrowseScreen)
+        monkeypatch.setattr(os, "link", refuse)
+        await pilot.press("a")
+        await showing(app, pilot, tui.PathScreen)
+        app.screen.query_one("#path", Input).value = str(dest)
+        await click(app, pilot, "#ok")
+        outcome = await finish_progress(app, pilot)
+        assert "Hinweis: 1 Hardlink(s) als eigene Kopie" in outcome and "P/[h]" in outcome
+    run(scenario, tmp_path)
+    assert (dest / "P" / "[h]").read_text() == "inhalt"
+
+
 def test_extract_selection_with_glob_characters_in_name(tmp_path):
     """Fund: "Auswahl entpacken" von "Urlaub [2019].jpg" entpackte "Urlaub 2.jpg" –
     der Name ging ungeschützt als fnmatch-Muster an ``only``."""

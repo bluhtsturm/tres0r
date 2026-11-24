@@ -1,5 +1,40 @@
 # Changelog
 
+## Unveröffentlicht
+
+Format und Python-API sind unverändert.
+
+### Behoben
+
+* **CLI – stiller Datenverlust:** `tres0r encrypt - --password-file -` (Passwort in der
+  ersten Zeile, danach die Daten) verschlüsselte einen **unvollständigen** Datenstrom und
+  meldete Erfolg: Das Passwort wurde gepuffert von stdin gelesen, die folgenden bis zu
+  8 KiB fehlten im Container. `decrypt -` meldete in diesem Fall irreführend „Keine
+  tres0r-Datei“. Liefert stdin die Daten bzw. den Container, lehnen `encrypt`, `decrypt`
+  und `unpack` jetzt `--password-file -` und `--key-passphrase-file -` ab (`unpack` tat
+  das bisher nur für `--password-file -`).
+* **Entpacken, wenn das Ziel keine Links kann** (FAT/exFAT ohne Hardlinks, Windows ohne
+  Symlink-Recht bzw. Entwicklermodus – simuliert, nicht auf echter Hardware geprüft):
+  tarfiles Rückfall las das Link-Ziel erneut und brach mit der falschen Meldung „'…'
+  würde eine bereits entpackte Datei überschreiben (Groß-/Kleinschreibung …)“ ab bzw.
+  aus einem Datenstrom mit „Archiv im Container ist defekt: seeking backwards is not
+  allowed“. Mit `--only` fehlten solche Symlinks stillschweigend. Jetzt legt der
+  Namensschutz Links selbst an; geht das nicht, entsteht eine Kopie der Datei, und ein
+  Hinweis sagt, wie viele (Symlinks ohne Datei als Ziel werden aufgezählt).
+* **GUI/TUI:** zeigen diese Hinweise nach dem Entpacken in der Zusammenfassung (bisher
+  nur die CLI).
+* **`--only` mit Hardlink aus einer Pipe bzw. bei v1-Containern** (ohne
+  Inhaltsverzeichnis): statt „Archiv im Container ist defekt: seeking backwards …“ sagt
+  die Meldung, dass das Ziel des Hardlinks mit ausgewählt werden muss. (Mit
+  Inhaltsverzeichnis holt tres0r das Ziel wie bisher selbst dazu.)
+* **Präparierte Container:** Ein Hardlink ohne Ziel endete in einem rohen `KeyError`
+  (Traceback in der CLI), Einträge unter einer Datei bzw. einer Symlink-Schleife in einem
+  `OSError` mit dem Pfad des Staging-Ordners. Jetzt eine klare Formatfehler-Meldung
+  (Exit 3); ein Hardlink auf einen Ordner wird abgelehnt statt als leerer Ordner angelegt.
+* **Angehängte Segmente mit sehr tiefen Ordnerbäumen:** Kam ein Baum mit ~1000 Ebenen in
+  zwei Segmenten vor, endete das Entpacken in einem `RecursionError` – das Zusammenführen
+  der Segmente arbeitet jetzt iterativ (wie schon das Durchsuchen beim Packen).
+
 ## 1.3.0 – Erfolg eindeutig, Hilfe und Beenden in allen Oberflächen
 
 Format und Python-API sind unverändert. Kommandozeile: neuer Befehl `help`, Bedienfehler

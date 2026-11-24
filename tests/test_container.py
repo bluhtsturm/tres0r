@@ -7,6 +7,7 @@ import pytest
 from tres0r import container
 from tres0r.errors import (
     Cancelled,
+    FormatError,
     IntegrityError,
     Tres0rError,
     UnsafeArchive,
@@ -301,6 +302,106 @@ def test_setuid_bits_are_stripped(tmp_path, raw_writer):
     if os.name == "posix":
         mode = (tmp_path / "z" / "prog").stat().st_mode
         assert not mode & 0o4000 and not mode & 0o022
+
+
+def _dir(name):
+    ti = tarfile.TarInfo(name)
+    ti.type, ti.mode = tarfile.DIRTYPE, 0o755
+    return ti, None
+
+
+@pytest.mark.parametrize(
+    "members, message",
+    [
+        ([_link("h", "fehlt", tarfile.LNKTYPE)], "Ziel des Hardlinks 'h' fehlt"),
+        ([_dir("d"), _link("h", "d", tarfile.LNKTYPE)], "zeigt auf keine Datei"),
+        pytest.param([_file("a"), _file("a/b")], "kein Ordner", marks=posix_only),
+        pytest.param([_link("a", "b"), _link("b", "a"), _file("a/x")], "kein Ordner", marks=posix_only),
+    ],
+    ids=["hardlink-ohne-ziel", "hardlink-auf-ordner", "datei-unter-datei", "symlink-schleife"],
+)
+def test_broken_structures_are_clean_format_errors(tmp_path, members, message, raw_writer):
+    """Funde: Hardlink ohne Ziel endete in einem rohen KeyError (Traceback in der CLI),
+    Einträge unter einer Datei/Symlink-Schleife in einem OSError mit Staging-Pfad."""
+    bad = tmp_path / "kaputt.tres0r"
+    raw_writer(bad, make_tar(members))
+    dest = tmp_path / "ziel"
+    with pytest.raises(FormatError, match=message):
+        container.extract(bad, dest, PASSWORD)
+    assert os.listdir(dest) == []
+
+
+def _without_links(monkeypatch, *names):
+    def refuse(*args, **kwargs):
+        raise OSError(1314, "Links hier nicht möglich (simuliert)")
+    for name in names:
+        monkeypatch.setattr(os, name, refuse)
+
+
+LINKED = [_file("P/a", b"inhalt"), _link("P/h", "P/a", tarfile.LNKTYPE), _link("P/s", "a"),
+          _link("P/s-vorher", "z"), _link("P/s-ohne-ziel", "fehlt"), _file("P/z", b"spaet")]
+
+
+@pytest.mark.parametrize("missing", [("link",), ("symlink",), ("link", "symlink")])
+def test_links_fall_back_to_copies(tmp_path, raw_writer, monkeypatch, missing):
+    """Fund: Konnte das Ziel keinen Link anlegen (FAT/exFAT ohne Hardlinks, Windows ohne
+    Symlink-Recht), griff tarfiles Rückfall: Er filterte das Link-Ziel erneut ('P/a würde
+    eine bereits entpackte Datei überschreiben') bzw. wollte im Datenstrom zurückspulen."""
+    bad = tmp_path / "links.tres0r"
+    raw_writer(bad, make_tar(LINKED))
+    _without_links(monkeypatch, *missing)
+    result = container.extract(bad, tmp_path / "z", PASSWORD)
+    folder = tmp_path / "z" / "P"
+    assert (folder / "h").read_bytes() == b"inhalt" and result.entries == len(LINKED)
+    text = " ".join(result.warnings)
+    assert ("1 Hardlink(s) als eigene Kopie" in text) == ("link" in missing)
+    if "symlink" in missing:
+        assert (folder / "s").read_bytes() == b"inhalt" and not (folder / "s").is_symlink()
+        assert (folder / "s-vorher").read_bytes() == b"spaet"  # Ziel kam erst später im Archiv
+        assert not os.path.lexists(folder / "s-ohne-ziel")
+        assert "2 Symlink(s) als Kopie" in text and "1 Symlink(s) nicht angelegt" in text
+        assert "P/s-ohne-ziel -> fehlt" in text
+    elif os.name == "posix":
+        assert os.readlink(folder / "s") == "a"
+    assert leftovers(tmp_path / "z") == []
+
+
+def test_salvage_reports_link_copies(tmp_path, raw_writer, monkeypatch):
+    bad = tmp_path / "links.tres0r"
+    raw_writer(bad, make_tar(LINKED))
+    _without_links(monkeypatch, "link")
+    result = container.salvage(bad, tmp_path / "z", PASSWORD)
+    assert result.complete and (tmp_path / "z" / "P" / "h").read_bytes() == b"inhalt"
+    assert any("Hardlink(s) als eigene Kopie" in note for note in result.notes)
+
+
+@posix_only
+def test_links_fall_back_to_copies_with_index_and_only(tmp_path, monkeypatch):
+    src = tmp_path / "P"
+    src.mkdir()
+    (src / "a").write_text("inhalt")
+    os.link(src / "a", src / "h")
+    os.symlink("a", src / "s")
+    out = pack([src], tmp_path / "echt.tres0r").path
+    _without_links(monkeypatch, "link", "symlink")
+    result = container.extract(out, tmp_path / "z", PASSWORD, only=["P/h", "P/s"])  # holt P/a dazu
+    assert snapshot(tmp_path / "z") == {"P": None, "P/a": b"inhalt", "P/h": b"inhalt", "P/s": b"inhalt"}
+    assert len(result.warnings) == 2
+    with open(out, "rb") as stream:
+        container.extract_stream(stream, tmp_path / "pipe", PASSWORD, only=["P/a", "P/h"])
+    assert (tmp_path / "pipe" / "P" / "h").read_text() == "inhalt"
+
+
+def test_only_from_stream_names_missing_hardlink_target(tmp_path):
+    """Fund: 'cat c.tres0r | tres0r unpack - --only P/h' (bzw. ein v1-Container) meldete
+    'Archiv im Container ist defekt: seeking backwards is not allowed'."""
+    old = tmp_path / "alt.tres0r"  # v1: kein Inhaltsverzeichnis -> Entpacken im Datenstrom
+    write_raw_container(old, make_tar(LINKED[:2]))
+    with pytest.raises(Tres0rError, match="Hardlink auf 'P/a', das nicht mit ausgewählt ist") as caught:
+        container.extract(old, tmp_path / "z", PASSWORD, only=["P/h"])
+    assert not isinstance(caught.value, FormatError)  # Bedienung, kein Schaden
+    container.extract(old, tmp_path / "z", PASSWORD, only=["P/h", "P/a"])
+    assert (tmp_path / "z" / "P" / "h").read_bytes() == b"inhalt"
 
 
 # --- Passwort ändern --------------------------------------------------------

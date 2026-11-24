@@ -666,7 +666,8 @@ class BrowseWindow(QWidget):
             return
         result = self.main.run_task("Entpacken", lambda m: container.extract(
             self.path, dest, self.credentials, progress=m, only=only),
-            "Erfolgreich entpackt", lambda r: f"{r.entries} Einträge nach {dest}")
+            "Erfolgreich entpackt", lambda r: "\n".join([f"{r.entries} Einträge nach {dest}",
+                                                         *(f"Hinweis: {w}" for w in r.warnings)]))
         if result is not None:
             self.main.show_info(f"✓ Erfolgreich entpackt: {result.entries} Einträge nach {dest}")
 

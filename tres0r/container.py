@@ -23,6 +23,7 @@ Typischer Ablauf in einem Frontend:
 """
 from __future__ import annotations
 
+import errno
 import hashlib
 import io
 import json
@@ -1174,18 +1175,26 @@ def extract(
 
 
 def _merge_tree(src: Path, dst: Path) -> None:
-    """src in dst einsortieren; bei gleichem Namen gewinnt src (das neuere Segment)."""
-    for item in os.scandir(src):
-        target = dst / item.name
-        if item.is_dir(follow_symlinks=False) and target.is_dir() and not target.is_symlink():
-            _merge_tree(Path(item.path), target)
-            continue
-        if os.path.lexists(target):
-            if target.is_dir() and not target.is_symlink():
-                shutil.rmtree(target)
-            else:
-                target.unlink()
-        os.replace(item.path, target)
+    """src in dst einsortieren; bei gleichem Namen gewinnt src (das neuere Segment).
+
+    Iterativ wie scan(): Rekursiv endete ein Baum mit ~1000 Ebenen, der in zwei
+    Segmenten vorkam, in einem RecursionError."""
+    pending = [(Path(src), Path(dst))]
+    while pending:
+        source, destination = pending.pop()
+        with os.scandir(source) as it:
+            items = list(it)  # erst auflisten, dann verschieben
+        for item in items:
+            target = destination / item.name
+            if item.is_dir(follow_symlinks=False) and target.is_dir() and not target.is_symlink():
+                pending.append((Path(item.path), target))
+                continue
+            if os.path.lexists(target):
+                if target.is_dir() and not target.is_symlink():
+                    shutil.rmtree(target)
+                else:
+                    target.unlink()
+            os.replace(item.path, target)
 
 
 def _extract_segments(ops: list[_Opened], dest: Path, *, progress: Progress, rename: bool, check_space: bool,
@@ -1293,7 +1302,8 @@ def _extract_opened(op: _Opened, dest: Path, *, progress: Progress, rename: bool
 
     dest.mkdir(parents=True, exist_ok=True)
     staging = Path(tempfile.mkdtemp(prefix=".tres0r-", dir=dest))
-    guard = _NameGuard(staging, rename=rename, windows=os.name == "nt", xattrs=xattrs, acls=acls)
+    guard = _NameGuard(staging, rename=rename, windows=os.name == "nt", xattrs=xattrs, acls=acls,
+                       selective=bool(only) and positions is None)  # mit Index: _select holt Hardlink-Ziele
     warnings: list[str] = []
     try:
         try:
@@ -1320,7 +1330,7 @@ def _extract_opened(op: _Opened, dest: Path, *, progress: Progress, rename: bool
             raise FormatError(f"Archiv im Container ist defekt: {e}") from None
         if only and guard.count == 0 and require_match:
             raise Tres0rError("Kein Eintrag passt zu: " + ", ".join(only))
-        warnings = _apply_xattrs(staging, guard.xattrs)
+        warnings = guard.finish() + _apply_xattrs(staging, guard.xattrs)
 
         names = sorted(os.listdir(staging))
         conflicts = [n for n in names if os.path.lexists(dest / n)]
@@ -1620,6 +1630,10 @@ def remove_key(
 # ---------------------------------------------------------------------------
 # Namensschutz beim Entpacken
 # ---------------------------------------------------------------------------
+def _not_below_dir(name: str) -> FormatError:
+    return FormatError(f"'{name}' liegt unter einem Eintrag, der kein Ordner ist.")
+
+
 class _NameGuard:
     """tar-Filter fürs Entpacken: data_filter + Schutz vor stillem Überschreiben.
 
@@ -1628,12 +1642,23 @@ class _NameGuard:
     das Dateisystem zwei Namen zusammengelegt (Groß-/Kleinschreibung unter
     Windows/macOS, Unicode-Form unter macOS). Unter Windows werden zusätzlich
     dort ungültige Namen erkannt.
+
+    Links legt der Filter selbst an (an derselben Stelle im Ablauf wie tarfile) und
+    gibt dafür None zurück. tarfiles eigener Rückfall, wenn ein Link nicht geht
+    (Windows ohne Symlink-Recht, FAT/exFAT ohne Hardlinks), liest das Ziel erneut aus
+    dem Archiv – im Datenstrom unmöglich ("seeking backwards") und mit erneutem
+    Filteraufruf für das Ziel, den der Kollisionsschutz als Überschreiben deutet.
+    Stattdessen: Kopie der bereits entpackten Datei und ein Hinweis (``finish``).
     """
 
-    def __init__(self, root: Path, *, rename: bool, windows: bool, xattrs: bool = False, acls: bool = False) -> None:
+    def __init__(self, root: Path, *, rename: bool, windows: bool, xattrs: bool = False, acls: bool = False,
+                 selective: bool = False) -> None:
         self.root = root
         self.rename = rename
         self.windows = windows
+        self.selective = selective  # nur ausgewählte Einträge (only) im Datenstrom: Hardlink-Ziele fehlen evtl.
+        self._hardlink_copies: list[str] = []
+        self._failed_symlinks: list[tuple[str, str]] = []  # (Pfad im Staging, Ziel)
         self.want_xattrs, self.want_acls = xattrs, acls
         self.xattrs: list[tuple[str, dict[str, bytes]]] = []  # (Pfad im Staging, Attribute)
         self.now = time.time()
@@ -1694,7 +1719,15 @@ class _NameGuard:
             member = member.replace(**changes, deep=False)
 
         # 2. Sicherheitsprüfung (Traversal, Links nach außen, Gerätedateien, Rechte).
-        member = tarfile.data_filter(member, dest_path)
+        try:
+            member = tarfile.data_filter(member, dest_path)
+        except OSError as e:
+            # realpath scheitert, wenn ein übergeordneter Eintrag eine Datei oder eine
+            # Symlink-Schleife ist – tres0r schreibt so etwas nie. Sonst: roher OSError
+            # mit dem Pfad im (danach gelöschten) Staging-Ordner.
+            if e.errno in (errno.ENOTDIR, errno.ELOOP):
+                raise _not_below_dir(original) from None
+            raise
         name = member.name
         if not _mtime_ok(member.mtime):
             # os.utime würde mit OverflowError/ValueError abbrechen – tarfile fängt nur OSError.
@@ -1705,6 +1738,9 @@ class _NameGuard:
 
         # 3. Kollisionen am Dateisystem erkennen.
         target = self._target(name)
+        parent = os.path.dirname(target)
+        if os.path.lexists(parent) and not os.path.isdir(parent):  # z. B. Symlink auf eine Datei
+            raise _not_below_dir(original)
         if os.path.lexists(target):
             both_dirs = member.isdir() and os.path.isdir(target) and not os.path.islink(target)
             if not both_dirs:  # zwei Ordner gleichen Namens werden zusammengelegt
@@ -1737,7 +1773,68 @@ class _NameGuard:
                 }
                 if attributes:
                     self.xattrs.append((name, attributes))
+        if member.issym() or member.islnk():
+            self._make_link(member, original)
+            return None  # angelegt – tarfile überspringt den Eintrag
         return member
+
+    def _make_link(self, member: tarfile.TarInfo, original: str) -> None:
+        """Link anlegen wie tarfile (Ziel ist von data_filter geprüft); geht das nicht,
+        Hardlinks als Kopie, Symlinks nach dem Entpacken (``finish``)."""
+        path = self._target(member.name)
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        if member.issym():
+            try:
+                os.symlink(member.linkname, path)
+            except OSError:
+                self._failed_symlinks.append((member.name, member.linkname))
+            return
+        source = self._target(member.linkname)
+        if not os.path.exists(source):
+            if self.selective:
+                raise Tres0rError(f"'{original}' ist ein Hardlink auf '{member.linkname}', das nicht mit ausgewählt "
+                                  "ist – bitte auch das Ziel auswählen.")
+            raise FormatError(f"Ziel des Hardlinks '{original}' fehlt im Archiv: '{member.linkname}'.")
+        source = os.path.realpath(source)  # wie tarfile: auf die Datei selbst, nicht auf einen Symlink
+        try:
+            os.link(source, path)
+        except OSError:
+            if not os.path.isfile(source):
+                raise FormatError(f"Hardlink '{original}' zeigt auf keine Datei.") from None
+            shutil.copy2(source, path)
+            self._hardlink_copies.append(member.name)
+
+    def finish(self) -> list[str]:
+        """Nach dem Entpacken: Symlinks, die sich nicht anlegen ließen, durch eine Kopie
+        ihres Ziels ersetzen (nur Dateien im Container). Gibt Hinweise zurück."""
+        root = os.path.realpath(self.root)
+        copied, missing = [], []
+        for name, linkname in self._failed_symlinks:
+            path = self._target(name)
+            source = os.path.realpath(os.path.join(os.path.dirname(path), linkname))
+            try:
+                inside = os.path.commonpath([source, root]) == root
+            except ValueError:  # Windows: anderes Laufwerk
+                inside = False
+            if inside and os.path.isfile(source) and not os.path.lexists(path):
+                shutil.copy2(source, path)
+                copied.append(name)
+            else:
+                missing.append(f"{name} -> {linkname}")
+        self._failed_symlinks = []
+        notes = []
+        if self._hardlink_copies:
+            notes.append(f"{len(self._hardlink_copies)} Hardlink(s) als eigene Kopie entpackt – das Dateisystem "
+                         f"kann keine Hardlinks (z. B. {self._hardlink_copies[0]}).")
+        if copied:
+            notes.append(f"{len(copied)} Symlink(s) als Kopie ihres Ziels entpackt – hier lassen sich keine Symlinks "
+                         f"anlegen (z. B. {copied[0]}).")
+        if missing:
+            shown = ", ".join(missing[:10]) + (f" und {len(missing) - 10} weitere" if len(missing) > 10 else "")
+            notes.append(f"{len(missing)} Symlink(s) nicht angelegt – hier lassen sich keine Symlinks anlegen und "
+                         f"das Ziel ist keine Datei im Container: {shown}.")
+        self._hardlink_copies = []
+        return notes
 
 
 # ---------------------------------------------------------------------------
@@ -2021,6 +2118,7 @@ def _salvage_op(op: _Opened, staging: Path, rename: bool, result: SalvageResult,
             counter.finish()
     else:
         _salvage_stream(op, staging, guard, result, progress)
+    result.notes += [label + note for note in guard.finish()]
     result.renamed += guard.renamed
 
 

@@ -921,7 +921,9 @@ class BrowseScreen(Page):
             self.app.push_screen(ProgressScreen(
                 "Entpacken", lambda monitor: container.extract(self.path, dest, self.credentials, progress=monitor,
                                                                 only=only),
-                lambda result: f"{result.entries} Einträge nach {dest} entpackt.", "Erfolgreich entpackt"))
+                lambda result: "\n".join([f"{result.entries} Einträge nach {dest} entpackt.",
+                                          *(f"Hinweis: {w}" for w in result.warnings)]),  # z. B. Links als Kopie
+                "Erfolgreich entpackt"))
         self.app.push_screen(PathScreen("Wohin entpacken?", Path.cwd()), chosen)
 
     def action_verify(self) -> None:

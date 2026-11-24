@@ -59,6 +59,35 @@ def test_append_keeps_existing_bytes_and_newer_wins(work):
     fs.close()
 
 
+@pytest.mark.skipif(os.name != "posix", reason="tiefe Pfade (Windows: MAX_PATH)")
+def test_merge_of_deep_trees_needs_no_recursion(tmp_path):
+    """Fund: Ein Ordnerbaum mit ~1000 Ebenen, der in zwei Segmenten vorkam, endete beim
+    Entpacken in einem RecursionError (Traceback). Hier: 300 Ebenen bei niedriger Grenze –
+    macOS erlaubt nur 1024 Zeichen pro Pfad."""
+    import sys
+
+    def tree(base):
+        path = base / "T"
+        path.mkdir(parents=True)
+        for _ in range(300):
+            path = path / "a"
+            path.mkdir()
+        (path / "x").write_text(base.name)
+    tree(tmp_path / "alt")
+    tree(tmp_path / "neu")
+    depth, frame = 0, sys._getframe()
+    while frame is not None:
+        depth, frame = depth + 1, frame.f_back
+    limit = sys.getrecursionlimit()
+    sys.setrecursionlimit(depth + 150)
+    try:
+        container._merge_tree(tmp_path / "neu", tmp_path / "alt")
+    finally:
+        sys.setrecursionlimit(limit)
+    deepest = tmp_path / "alt" / "T" / "/".join(["a"] * 300) / "x"
+    assert deepest.read_text() == "neu"
+
+
 def test_diff_and_type_change_across_segments(work):
     tmp, out = work
     ordner = tmp / "wechsel" / "notiz.txt"
