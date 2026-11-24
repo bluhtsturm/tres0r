@@ -20,14 +20,16 @@ Container und eingebautem Passphrasen-Generator (pwgen) samt Have-I-Been-Pwned-P
   unabhängigem Referenz-Leser und Testvektoren
 * **Abhängigkeiten:** nur `cryptography`; alles Weitere als optionale Extras
 
-> **Status: 1.3.0.** Getestet unter Linux mit Python 3.10–3.14 (automatische Tests,
+> **Status: 1.3.1.** Getestet unter Linux mit Python 3.10–3.14 (automatische Tests,
 > Fuzzing, Property-Tests). Unter Windows und macOS laufen die automatischen Tests
 > (ohne GUI und FUSE) in der CI ebenfalls durch. Die GUI von Version 1.0 lief im
 > Handtest unter Debian 13 und unter Windows Server 2025 (von PyPI installiert), GUI
 > und TUI unter macOS Tahoe 26.7; die
 > Neuerungen aus 1.1.0 (Datenleck-Warnung, Passwort-Vorschlag, Abbruch) und 1.2.0
 > (Längenwahl der Vorschläge) sind von Hand bestätigt, die aus 1.3.0 (Erfolgsmeldungen,
-> Hilfe und Beenden, Korrekturen nach dem macOS-Test) unter macOS. FIDO2
+> Hilfe und Beenden, Korrekturen nach dem macOS-Test) unter macOS. Die Korrekturen aus
+> 1.3.1 sind automatisch getestet; das Entpacken auf Ziele ohne Links (Windows ohne
+> Symlink-Recht, FAT/exFAT) ist dabei nur simuliert, nicht auf echten Systemen. FIDO2
 > ist nur gegen einen Software-Token getestet, noch nicht mit echter Hardware. Eine
 > unabhängige Sicherheitsprüfung (Audit) gab es bisher nicht – siehe
 > [`SECURITY.md`](SECURITY.md).
@@ -495,6 +497,12 @@ drohen aber Probleme. `pack` warnt vor:
 Kollisionen direkt am Dateisystem und bricht ab; mit `--rename` wird umbenannt
 (`datei (1).txt`, unter Windows `CON.txt` → `CON_.txt`). Die Umbenennungen werden
 aufgelistet.
+
+Links: Kann das Ziel keine Hardlinks (FAT/exFAT, etwa USB-Sticks) oder keine Symlinks
+anlegen (Windows ohne Entwicklermodus bzw. Administratorrechte), entpackt tres0r eine
+Kopie der verlinkten Datei und sagt am Ende, wie viele es waren. Symlinks auf Ordner
+oder auf Ziele außerhalb des Containers lassen sich so nicht ersetzen – sie werden
+aufgezählt und fehlen im Ziel. CLI, TUI und GUI zeigen diese Hinweise.
 
 ## Stufen
 

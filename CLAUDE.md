@@ -9,7 +9,7 @@ was getestet ist, was nicht, und Funde offen benennen.
 Verschlüsselte Container für Dateien/Ordner/Datenströme: Argon2id + ChaCha20-Poly1305
 (STREAM, 64-KiB-Chunks), bis zu 16 Keyslots, Ed25519-Signaturen, tar mit
 Inhaltsverzeichnis, optional zstd. CLI, TUI (Textual), GUI (PySide6). Stand:
-1.3.0 (`pyproject.toml`), Lizenz MIT. Paketname auf PyPI: `tres0r-crypt` (`tres0r`
+1.3.1 (`pyproject.toml`), Lizenz MIT. Paketname auf PyPI: `tres0r-crypt` (`tres0r`
 lehnt PyPI als zu ähnlich zu `tresor` ab) – Import und Befehl bleiben `tres0r`.
 
 ## Aufbau
@@ -142,6 +142,10 @@ mit eigenem Index, Prüfung auf hängende Threads nach jedem Test),
   in 1.3.0 behoben, und die Änderungen aus 1.3.0 wurden dort als funktionierend bestätigt.
   Unter Windows und Linux sind Erfolgsmeldungen und Hilfe/Beenden aus 1.3.0 nur automatisch
   getestet. `mount` ist nur für Linux und macOS vorgesehen.
+* 1.3.1: Entpacken auf Ziele ohne Links (Kopie statt Link, Hinweis in CLI/TUI/GUI) ist nur
+  simuliert (`os.link`/`os.symlink` per monkeypatch), nicht unter echtem Windows ohne
+  Symlink-Recht bzw. auf FAT/exFAT geprüft; der `rmtree`-Ersatz vor Python 3.13 lief unter
+  3.10 und 3.12 (Linux), nicht unter Windows.
 * GUI auf echten Desktops: Julian hat sie von Hand ausprobiert – 1.0 unter Debian 13
   (seine Befunde → 1.1.0) und 1.0.1 von PyPI unter Windows Server 2025, beides lief.
   Nicht gezielt geprüft: X11/Wayland, Themes, HiDPI, Drag & Drop, Dateidialoge.

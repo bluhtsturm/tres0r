@@ -1,6 +1,6 @@
 # Changelog
 
-## Unveröffentlicht
+## 1.3.1 – Funde aus einer Durchsicht: stdin, Links beim Entpacken, Segmente
 
 Format und Python-API sind unverändert. FORMAT.md ergänzt (ohne Formatänderung): Grenze
 für die Länge der Segmenttabelle, Entwerten liegengebliebener Tabellen, was Signaturen
