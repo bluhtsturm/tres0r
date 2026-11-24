@@ -75,6 +75,15 @@ mit eigenem Index, Prüfung auf hängende Threads nach jedem Test),
 * **tarfile:** großer `bufsize` im Lese-Stream-Modus macht es *langsamer*
   (Puffer wird bei jedem kleinen read umkopiert); nur `copybufsize` beim Schreiben groß.
 * **tarfile `data_filter`** lässt `a/../b` zu (bleibt im Ziel) → `_NameGuard` lehnt `..` ab.
+* **tarfile-Rückfall bei Links:** Kann das Ziel keinen Link anlegen (FAT/exFAT, Windows
+  ohne Symlink-Recht), filtert tarfile das Link-Ziel erneut und liest es nochmals aus dem
+  Archiv – im Datenstrom unmöglich, und `_NameGuard` hielt es für eine Kollision. Deshalb
+  legt `_NameGuard` Links selbst an (Kopie als Rückfall, Hinweis über `finish()`).
+  Testen: `os.link`/`os.symlink` per monkeypatch scheitern lassen.
+* **`shutil.rmtree`** ist bis Python 3.12 rekursiv: ~1000 Ebenen → `RecursionError`, auch
+  mit `ignore_errors` → im Kern `container._rmtree`. Ältere Pythons lokal: `uv venv -p 3.10`.
+* **stdin:** `sys.stdin.readline()` puffert bis zu 8 KiB – liefert stdin Daten, darf kein
+  Passwort von dort kommen (`cli._stdin_is_data`), sonst fehlen sie still.
 * **`passgen.Secret`:** `str()` ist absichtlich geschwärzt – immer `.value`.
 * **Passphrasen/Anteile anzeigen:** nie abschneiden, nie nach `-` umbrechen lassen.
   Vorschläge (bis 40 Wörter/128 Zeichen) über `passgen._display_lines`: nur zwischen

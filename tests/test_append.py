@@ -59,33 +59,66 @@ def test_append_keeps_existing_bytes_and_newer_wins(work):
     fs.close()
 
 
-@pytest.mark.skipif(os.name != "posix", reason="tiefe Pfade (Windows: MAX_PATH)")
-def test_merge_of_deep_trees_needs_no_recursion(tmp_path):
-    """Fund: Ein Ordnerbaum mit ~1000 Ebenen, der in zwei Segmenten vorkam, endete beim
-    Entpacken in einem RecursionError (Traceback). Hier: 300 Ebenen bei niedriger Grenze –
-    macOS erlaubt nur 1024 Zeichen pro Pfad."""
+def _deep_tree(base, levels=300):
+    path = base / "T"
+    path.mkdir(parents=True)
+    for _ in range(levels):
+        path = path / "a"
+        path.mkdir()
+    (path / "x").write_text(base.name)
+    return path
+
+
+@pytest.fixture
+def low_recursion_limit():
+    """Rekursionsgrenze knapp über der aktuellen Tiefe: 300 Ebenen genügen dann als Beweis
+    (macOS erlaubt nur 1024 Zeichen pro Pfad, ~1000 Ebenen gingen dort gar nicht)."""
     import sys
 
-    def tree(base):
-        path = base / "T"
-        path.mkdir(parents=True)
-        for _ in range(300):
-            path = path / "a"
-            path.mkdir()
-        (path / "x").write_text(base.name)
-    tree(tmp_path / "alt")
-    tree(tmp_path / "neu")
     depth, frame = 0, sys._getframe()
     while frame is not None:
         depth, frame = depth + 1, frame.f_back
     limit = sys.getrecursionlimit()
-    sys.setrecursionlimit(depth + 150)
-    try:
-        container._merge_tree(tmp_path / "neu", tmp_path / "alt")
-    finally:
-        sys.setrecursionlimit(limit)
+    yield lambda: sys.setrecursionlimit(depth + 150)
+    sys.setrecursionlimit(limit)
+
+
+@pytest.mark.skipif(os.name != "posix", reason="tiefe Pfade (Windows: MAX_PATH)")
+def test_merge_of_deep_trees_needs_no_recursion(tmp_path, low_recursion_limit):
+    """Fund: Ein Ordnerbaum mit ~1000 Ebenen, der in zwei Segmenten vorkam, endete beim
+    Entpacken in einem RecursionError (Traceback) – im Zusammenführen und, bis Python 3.12,
+    im Aufräumen des leeren Ordnergerüsts (shutil.rmtree ist dort rekursiv, auch mit
+    ignore_errors)."""
+    _deep_tree(tmp_path / "alt")
+    _deep_tree(tmp_path / "neu")
+    low_recursion_limit()
+    container._merge_tree(tmp_path / "neu", tmp_path / "alt")
+    container._rmtree(tmp_path / "neu", ignore_errors=True)  # bleibt: das leere Gerüst
     deepest = tmp_path / "alt" / "T" / "/".join(["a"] * 300) / "x"
-    assert deepest.read_text() == "neu"
+    assert deepest.read_text() == "neu" and not (tmp_path / "neu").exists()
+
+
+@pytest.mark.skipif(os.name != "posix", reason="tiefe Pfade (Windows: MAX_PATH), Symlinks")
+def test_iterative_rmtree(tmp_path, low_recursion_limit):
+    """Der Ersatz für shutil.rmtree vor Python 3.13 – hier direkt, damit er unter jeder
+    Version geprüft wird."""
+    outside = tmp_path / "draussen"
+    outside.mkdir()
+    (outside / "bleibt.txt").write_text("x")
+    deepest = _deep_tree(tmp_path / "weg")
+    os.symlink(outside, deepest / "link")  # wird entfernt, nicht verfolgt
+    os.symlink("fehlt", tmp_path / "weg" / "kaputt")
+    os.symlink(outside, tmp_path / "zeiger")
+    with pytest.raises(OSError):  # wie shutil.rmtree: einen Symlink als Wurzel nie verfolgen
+        container._rmtree_iterative(str(tmp_path / "zeiger"), False)
+    container._rmtree_iterative(str(tmp_path / "zeiger"), True)
+    assert (outside / "bleibt.txt").exists()
+    low_recursion_limit()
+    container._rmtree_iterative(str(tmp_path / "weg"), False)
+    assert not (tmp_path / "weg").exists() and (outside / "bleibt.txt").exists()
+    container._rmtree_iterative(str(tmp_path / "weg"), True)  # fehlt schon: still
+    with pytest.raises(FileNotFoundError):
+        container._rmtree_iterative(str(tmp_path / "weg"), False)
 
 
 def test_diff_and_type_change_across_segments(work):
@@ -196,6 +229,43 @@ def test_repair_completes_when_table_was_written(work):
     segments.write_journal(out, size, original_header)
     assert "abgeschlossen" in container.repair(out, PASSWORD).action
     assert container.verify(out, PASSWORD).segments == 2
+
+
+def _crash_before_invalidating(out, tmp):
+    """Zwei Anhänge; beim zweiten Absturz nach der neuen Tabelle, vor dem Entwerten der alten."""
+    add(out, tmp / "neu" / "notiz.txt")
+    size = out.stat().st_size  # Ende der Tabelle nach Segment 1
+    add(out, tmp / "neu" / "extra.txt")
+    with open(out, "r+b") as f:
+        f.seek(size - len(segments.MAGIC))
+        f.write(segments.MAGIC)  # Kennung der alten Tabelle ist noch da
+    return size
+
+
+def test_repair_invalidates_table_a_crash_left_valid(work):
+    """Fund: Nach einem Absturz zwischen neuer Segmenttabelle und dem Entwerten der alten
+    meldete 'repair' "in Ordnung" – die alte Tabelle blieb gültig, Abschneiden auf den
+    älteren Stand ergab wieder einen gültigen Container."""
+    tmp, out = work
+    size = _crash_before_invalidating(out, tmp)
+    segments.write_journal(out, size, None)
+    older = tmp / "abgeschnitten.tres0r"
+    older.write_bytes(out.read_bytes()[:size])
+    assert container.verify(older, PASSWORD).segments == 2  # die Lücke
+    assert "1 ältere Segmenttabelle(n) entwertet" in container.repair(out, PASSWORD).action
+    assert not segments.journal_path(out).exists() and container.verify(out, PASSWORD).segments == 3
+    older.write_bytes(out.read_bytes()[:size])
+    with pytest.raises(FormatError, match="Segmenttabelle fehlt"):
+        container.verify(older, PASSWORD)
+    assert container.repair(out, PASSWORD).action == "Container ist in Ordnung."
+
+
+def test_next_append_invalidates_tables_a_crash_left_valid(work):
+    tmp, out = work
+    size = _crash_before_invalidating(out, tmp)  # ohne repair: der Container liest sich normal
+    add(out, tmp / "alt" / "notiz.txt")
+    assert out.read_bytes()[size - len(segments.MAGIC):size] == bytes(len(segments.MAGIC))
+    assert container.verify(out, PASSWORD).segments == 4
 
 
 def test_repair_without_journal_finds_last_table(work):

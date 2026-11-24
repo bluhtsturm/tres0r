@@ -343,12 +343,16 @@ T         = u8 version=1 ‖ u32 n ‖ n × (u64 offset ‖ u64 länge ‖ nonce
 * Ansicht: Einträge späterer Segmente ersetzen gleichnamige früherer (auch bei
   anderem Typ). Wer mehrere Segmente prüft und Unterzeichner verlangt, verlangt
   sie für **jedes** Segment. Signaturen belegen Herkunft und Unversehrtheit je
-  Segment, nicht die Vollständigkeit der Segmentliste gegenüber Mitempfängern,
-  die den DEK kennen.
+  Segment, nicht Vollständigkeit und Reihenfolge der Segmentliste: Wer den DEK
+  kennt (jeder Mitempfänger), kann die Tabelle neu schreiben, Segmente weglassen
+  oder umsortieren und damit bestimmen, welche Fassung gleichnamiger Einträge gilt.
 * Schreiber hängen an Ort und Stelle an: Segment und neue Tabelle ans Ende; danach
   beim ersten Anhängen Bit 2 im Header setzen (gleiche Länge, neuer MAC), sonst die
   Kennung `"TRS0SEG\x01"` der vorherigen Tabelle mit Nullbytes überschreiben –
   so ergibt ein Abschneiden auf einen früheren Stand keinen gültigen Container.
+  Steht vor einem Segment noch die Kennung einer älteren Tabelle (Absturz zwischen
+  beiden Schritten), **SOLLEN** der nächste Schreibvorgang bzw. eine Reparatur sie
+  ebenso überschreiben.
 
 ## 10. Grenzen
 
@@ -361,6 +365,10 @@ T         = u8 version=1 ‖ u32 n ‖ n × (u64 offset ‖ u64 länge ‖ nonce
 | Header | 65535 Byte |
 | Block (lesen) | 4 MiB |
 | Inhaltsverzeichnis `blob` / entpackt | 256 MiB / 1 GiB |
+| Segmenttabelle `ct` (9b) | 139285 Byte (5 + 4096 · 34 + 16, folgt aus n ≤ 4096) |
+
+Die Länge `len(ct)` am Dateiende ist nicht authentifiziert: Leser **SOLLEN** sie
+gegen diese Grenze prüfen, bevor sie die Tabelle lesen.
 
 Leser **SOLLEN** vor Argon2 prüfen, ob `m_kib` in den verfügbaren Arbeitsspeicher
 passt, und sonst mit einer klaren Meldung abbrechen.
