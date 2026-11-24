@@ -255,6 +255,20 @@ def _password_candidates(spec: str) -> list[str]:
     return [password, line] if line != password else [password]
 
 
+def _stdin_is_data(args: argparse.Namespace, what: str) -> None:
+    """stdin liefert Nutzdaten: Passwörter dürfen dann nicht auch von dort kommen.
+
+    Sonst liest ``sys.stdin.readline()`` gepuffert (bis zu 8 KiB) über die erste Zeile
+    hinaus – diese Bytes fehlten dem Datenstrom: Beim Verschlüsseln entstünde still ein
+    unvollständiger Container, beim Entschlüsseln eine irreführende Fehlermeldung.
+    """
+    _Terminal.stdin_is_data = True
+    for option in ("password_file", "key_passphrase_file"):
+        if getattr(args, option, None) == "-":
+            flag = "--" + option.replace("_", "-")
+            raise Tres0rError(f"stdin liefert schon {what} - {flag} bitte als Datei oder per Rückfrage.")
+
+
 def _read_password_file(spec: str) -> str:
     """Passwort aus Datei bzw. stdin ('-'), ohne Byte-Order-Mark."""
     return _password_candidates(spec)[0]
@@ -694,9 +708,7 @@ def cmd_unpack(args: argparse.Namespace, ui: Ui) -> int:
     info = None if from_stdin else container.inspect(args.container)  # Formatfehler vor der Passwortabfrage
     signers = _signers(args)  # Tippfehler in Prüfschlüsseln vor der Schlüsselableitung melden
     if from_stdin:
-        _Terminal.stdin_is_data = True
-        if args.password_file == "-":
-            raise Tres0rError("stdin liefert schon den Container - Passwort bitte per Datei oder Rückfrage.")
+        _stdin_is_data(args, "den Container")
     creds = _credentials(args, info)
     if info is not None:
         _unlock_status(ui, info, args)
@@ -967,7 +979,8 @@ def cmd_encrypt(args: argparse.Namespace, ui: Ui) -> int:
     if args.json and args.output == "-":
         raise Tres0rError("--json und Ausgabe auf stdout schließen sich aus.")
     _refuse_terminal_output(args.output)
-    _Terminal.stdin_is_data = args.input == "-"
+    if args.input == "-":
+        _stdin_is_data(args, "die Daten")
     if args.compress:
         container.payload._require_zstd()
     setup = _key_setup(args, ui)
@@ -1000,7 +1013,8 @@ def cmd_decrypt(args: argparse.Namespace, ui: Ui) -> int:
     if args.json and args.output == "-":
         raise Tres0rError("--json und Ausgabe auf stdout schließen sich aus.")
     _refuse_terminal_output(args.output)
-    _Terminal.stdin_is_data = args.container == "-"
+    if args.container == "-":
+        _stdin_is_data(args, "den Container")
     info = None if args.container == "-" else container.inspect(args.container)
     signers = _signers(args)
     creds = _credentials(args, info)
