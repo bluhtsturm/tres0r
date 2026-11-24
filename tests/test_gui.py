@@ -191,6 +191,34 @@ def test_open_search_extract_and_wrong_password(app, tmp_path, project):
     browse.close()
 
 
+def test_extract_shows_hints(app, tmp_path, monkeypatch):
+    """Hinweise des Entpackens (z. B. Hardlink als Kopie auf FAT/exFAT, Symlinks unter Windows
+    ohne Symlink-Recht) zeigte nur die CLI – in der GUI fehlte eine Datei ohne jeden Hinweis."""
+    import tarfile
+
+    from conftest import make_tar, write_raw_container_v2
+
+    target, link = tarfile.TarInfo("P/a"), tarfile.TarInfo("P/h")
+    target.size, link.type, link.linkname = 6, tarfile.LNKTYPE, "P/a"
+    out = tmp_path / "l.tres0r"
+    write_raw_container_v2(out, make_tar([(target, b"inhalt"), (link, None)]))
+    window, driver = make(app, tmp_path)
+    window.select(out)
+    driver.handlers["UnlockDialog"] = unlock_with()
+    window.open()
+    browse = window.windows[-1]
+    driver.handlers["directory"] = lambda: tmp_path / "ziel"
+
+    def refuse(*args, **kwargs):
+        raise OSError(1, "keine Hardlinks (simuliert)")
+    monkeypatch.setattr(os, "link", refuse)
+    browse.extract_all()
+    summary = driver.progress[-1].outcome.text()
+    assert summary.startswith("2 Einträge") and "Hinweis: 1 Hardlink(s) als eigene Kopie" in summary
+    assert (tmp_path / "ziel" / "P" / "h").read_text() == "inhalt"
+    browse.close()
+
+
 def test_extract_selection_with_glob_characters_in_name(app, tmp_path):
     """Fund: "Urlaub [2019].jpg" auswählen entpackte "Urlaub 2.jpg" (Name als fnmatch-Muster)."""
     root = tmp_path / "Fotos"
