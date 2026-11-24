@@ -176,6 +176,28 @@ def test_real_pipes(tmp_path, identity):
     assert broken.returncode == 3  # Abschneiden fällt auf – Exit-Code prüfen!
 
 
+def test_secrets_not_read_from_stdin_that_carries_data(tmp_path, pwfile):
+    """Fund: 'encrypt - --password-file -' las das Passwort gepuffert von stdin – die
+    folgenden ~8 KiB der Daten fehlten im Container, trotzdem Exit 0."""
+    data = os.urandom(300_000)
+    out = tmp_path / "c.tres0r"
+    sealed = _run(["encrypt", "-", "-o", str(out), "--password-file", "-", "--offline"],
+                  stdin=PASSWORD.encode() + b"\n" + data)
+    assert sealed.returncode == 1 and not out.exists()
+    assert "--password-file bitte als Datei" in sealed.stderr.decode()
+
+    ok =_run(["encrypt", "-", "-o", str(out), "--password-file", pwfile, "--offline", "-l", "schnell"], stdin=data)
+    assert ok.returncode == 0, ok.stderr.decode()
+    container_bytes = out.read_bytes()
+    for argv in (["decrypt", "-", "-o", "-", "--password-file", "-"],
+                 ["decrypt", "-", "-o", "-", "--password-file", pwfile, "--key-passphrase-file", "-"],
+                 ["unpack", "-", "-o", str(tmp_path / "ziel"), "--key-passphrase-file", "-"]):
+        refused = _run(argv, stdin=PASSWORD.encode() + b"\n" + container_bytes)
+        assert refused.returncode == 1 and "stdin liefert schon den Container" in refused.stderr.decode(), argv
+    plain = _run(["decrypt", "-", "-o", "-", "--password-file", pwfile], stdin=container_bytes)
+    assert plain.returncode == 0 and plain.stdout == data
+
+
 def test_decrypt_tar_container_to_tar(tmp_path, sample_tree, pwfile):
     out = tmp_path / "t.tres0r"
     main(["pack", *map(str, sample_tree), "-o", str(out), "--password-file", pwfile, "--offline"])
